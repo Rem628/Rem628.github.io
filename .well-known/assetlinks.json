@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "host.workbuddy.app.math_bank_38072.twa",
+      "sha256_cert_fingerprints": [
+        "F6:E0:5E:DD:C3:B8:74:1D:30:F8:52:2C:F8:10:14:02:6C:69:68:5A:18:D4:FD:B3:80:D1:E0:A7:0D:A6:C7:AD"
+      ]
+    }
+  }
+]

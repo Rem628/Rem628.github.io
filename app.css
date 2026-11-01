@@ -1,0 +1,217 @@
+*{box-sizing:border-box}
+body{margin:0;font-family:"Microsoft YaHei","PingFang SC",system-ui,sans-serif;
+     background:#f5f6f8;color:#1f2329;line-height:1.6}
+a{color:#165dff;text-decoration:none}
+
+/* ---------- 顶部 ---------- */
+header{background:#fff;border-bottom:1px solid #e5e6eb;padding:12px 20px;position:sticky;top:0;z-index:20;
+       box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.breadcrumb{font-size:12px;color:#86909c;margin-bottom:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+header h1{margin:0;font-size:17px;font-weight:600}
+header .sub{color:#86909c;font-size:12.5px;margin-top:2px}
+.toolbar{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+input[type=search]{flex:1;min-width:160px;padding:8px 12px;border:1px solid #d9dce3;border-radius:6px;font-size:14px}
+input[type=text],input[type=email],input[type=password],input[type=number]{
+  padding:9px 12px;border:1px solid #d9dce3;border-radius:6px;font-size:14px;width:100%}
+#jumpno{width:78px;flex:none}
+.btn{padding:7px 12px;border:1px solid #d9dce3;background:#fff;border-radius:6px;cursor:pointer;font-size:13px;
+     color:#1f2329;display:inline-block}
+.btn:hover{background:#f2f3f5}
+.btn.on{background:#165dff;color:#fff;border-color:#165dff}
+.btn.primary{background:#165dff;color:#fff;border-color:#165dff}
+.btn.primary:hover{background:#0e42d2}
+.btn.danger{color:#d03050;border-color:#f5b3bf}
+.btn.linkish{border:none;background:none;color:#165dff;padding:7px 4px}
+.score{font-size:13px;color:#4e5969;padding:7px 12px;background:#f7f8fa;border-radius:6px;white-space:nowrap}
+.score b{color:#165dff}
+
+/* ---------- 目录 / 题组 ---------- */
+.nav-toggle{margin-left:auto;padding:5px 11px;border:1px solid #d9dce3;background:#fff;
+   border-radius:6px;font-size:13px;cursor:pointer;color:#4e5969;white-space:nowrap}
+.nav-toggle:hover{background:#f2f3f5;border-color:#94bfff;color:#165dff}
+#navbox.closed{display:none}
+.groupbar{margin-top:9px;padding-top:9px;border-top:1px dashed #e5e6eb;display:flex;gap:6px;flex-wrap:wrap}
+.gbtn{padding:6px 11px;border:1px solid #d9dce3;background:#fff;border-radius:16px;cursor:pointer;
+      font-size:12.5px;color:#4e5969;white-space:nowrap}
+.gbtn:hover{border-color:#94bfff;background:#f5f9ff;color:#165dff}
+.gbtn.on{background:#165dff;color:#fff;border-color:#165dff}
+.gbtn .n{opacity:.75;font-size:11.5px}
+
+.wrap{max-width:1100px;margin:0 auto;padding:16px 18px 60px}
+.kp-block{margin:22px 0;scroll-margin-top:70px}
+.kp-title{font-size:15px;font-weight:600;color:#165dff;margin:0 0 8px;padding:9px 12px;
+          background:#eaf2ff;border-radius:6px}
+.q{background:#fff;border:1px solid #e5e6eb;border-radius:10px;padding:16px 18px;margin:12px 0}
+.q .qh{display:flex;align-items:center;margin-bottom:8px;gap:10px;flex-wrap:wrap}
+.q .no{font-weight:600;font-size:14px}
+.q .meta{font-size:12px;color:#86909c;margin-left:auto}
+.q .stem img{max-width:100%;height:auto;display:block;margin:4px 0}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.opt{display:flex;align-items:center;gap:9px;border:1px solid #e5e6eb;border-radius:8px;padding:8px 10px;
+     background:#fafbfc;cursor:pointer;transition:background .12s,border-color .12s}
+.opt:hover{border-color:#94bfff;background:#f5f9ff}
+.opt input{margin:0;cursor:pointer;flex:none;width:15px;height:15px}
+.opt img{max-width:100%;height:auto}
+.opt .lbl{font-weight:700;color:#165dff;flex:none}
+.opt.right{border-color:#00b42a;background:#e8ffea}
+.opt.wrong{border-color:#f53f3f;background:#ffece8}
+.opt.locked{cursor:default}
+.opt.locked:hover{border-color:#e5e6eb;background:#fafbfc}
+.opt.locked.right,.opt.locked.right:hover{border-color:#00b42a;background:#e8ffea}
+.opt.locked.wrong,.opt.locked.wrong:hover{border-color:#f53f3f;background:#ffece8}
+.fb{margin-top:10px;font-size:14px;font-weight:600}
+.fb.ok{color:#00b42a}
+.fb.no{color:#f53f3f}
+.why{margin-top:8px;padding:10px 12px;background:#f7f8fa;border-radius:8px;display:none}
+.why.show{display:block}
+.why img{max-width:100%;height:auto;margin-top:6px}
+.why .hint{color:#86909c;font-size:12px}
+.peek{margin-top:8px;font-size:12px;color:#86909c}
+.peek button{background:none;border:none;color:#165dff;cursor:pointer;font-size:12px;padding:0}
+.fav-btn{background:none;border:none;color:#c9cdd4;font-size:15px;cursor:pointer;padding:2px 6px;
+  border-radius:4px;line-height:1}
+.fav-btn:hover{background:#f7f8fa}
+.fav-btn.on{color:#f7a825}
+.empty{padding:40px 0;text-align:center;color:#86909c;font-size:14px}
+
+/* ---------- 提示 ---------- */
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:rgba(31,35,41,.92);
+   color:#fff;padding:9px 17px;border-radius:20px;font-size:13px;z-index:60;opacity:0;
+   pointer-events:none;transition:opacity .25s;max-width:90vw;text-align:center}
+.toast.show{opacity:1}
+.banner{padding:10px 14px;border-radius:8px;font-size:13px;margin:12px 0}
+.banner.info{background:#eaf2ff;color:#165dff;border:1px solid #bcdaff}
+.banner.warn{background:#fff7e8;color:#7a4d10;border:1px solid #ffd08a}
+.banner.err{background:#ffece8;color:#a11127;border:1px solid #f5b3bf}
+
+/* ---------- 卡片 / 首页 ---------- */
+.hero{background:#fff;border-bottom:1px solid #e5e6eb;padding:20px}
+.tk-card{border:1px solid #e5e6eb;border-radius:10px;background:#fff;padding:16px 18px;margin:14px 0}
+.tk-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.tk-name{font-size:17px;font-weight:600}
+.tk-count{font-size:13px;color:#86909c}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.chip{padding:8px 13px;border:1px solid #d9dce3;border-radius:8px;font-size:13.5px;background:#fafbfc}
+.chip:hover{border-color:#94bfff;background:#f5f9ff;color:#165dff}
+.chip b{color:#165dff;font-weight:600}
+.chip-new{background:#eaf2ff;border-color:#94bfff;color:#165dff;font-weight:600}
+
+/* ---------- 登录 ---------- */
+.authbox{max-width:400px;margin:36px auto;background:#fff;border:1px solid #e5e6eb;
+  border-radius:12px;padding:26px}
+.authbox h2{margin:0 0 4px;font-size:19px}
+.authbox .lead{color:#86909c;font-size:13px;margin-bottom:18px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12.5px;color:#4e5969;margin-bottom:5px}
+.field .err{color:#d03050;font-size:12px;margin-top:4px}
+.tabs{display:flex;gap:6px;margin-bottom:16px}
+.tabs button{flex:1;padding:9px;border:1px solid #d9dce3;background:#fff;border-radius:6px;cursor:pointer;font-size:14px}
+.tabs button.on{background:#165dff;color:#fff;border-color:#165dff}
+.row2{display:flex;gap:8px}
+.row2 .field{flex:1}
+
+/* ---------- 后台 ---------- */
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;
+  font-size:13.5px;border:1px solid #e5e6eb}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #f0f1f3}
+th{background:#f7f8fa;font-weight:600;color:#4e5969;white-space:nowrap}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.muted{color:#86909c}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11.5px;background:#eaf2ff;color:#165dff}
+.tag.admin{background:#e8ffea;color:#008a1e}
+
+@media (max-width:768px){
+  #navbox{display:none}
+  #navbox.open{display:block;padding-top:8px;max-height:46vh;overflow-y:auto;
+    -webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  header{padding:10px 14px}
+  header h1{font-size:16px}
+  .gbtn{font-size:12px;padding:5px 9px}
+  #jumpno{width:66px}
+  .authbox{margin:16px 12px;padding:20px}
+}
+@media (max-width:640px){
+  .opts{grid-template-columns:1fr}
+  .wrap,.hero{padding:12px}
+  table{font-size:12.5px}
+  th,td{padding:8px 8px}
+}
+/* 图片加载失败的占位 */
+.img-missing{padding:10px 12px;background:#f7f8fa;border:1px dashed #f5b3bf;border-radius:6px;
+  color:#86909c;font-size:12px;margin:4px 0}
+
+/* ---------- 收藏夹分组（科目 → 章节 → 知识点，与题库页统一） ---------- */
+.fav-tk{font-size:16px;font-weight:700;color:#1B3B6F;margin:26px 0 10px;
+  padding-bottom:7px;border-bottom:2px solid #1B3B6F;
+  display:flex;align-items:center;gap:10px}
+.fav-tk .n{margin-left:auto;font-size:12.5px;font-weight:400;color:#86909c}
+.fav-ch{font-size:14.5px;font-weight:600;color:#165dff;margin:18px 0 8px;
+  border-left:3px solid #165dff;padding-left:9px;
+  display:flex;align-items:center;gap:10px}
+.fav-ch .n{margin-left:auto;font-size:12px;font-weight:400;color:#86909c}
+.fav-tk .kp-block,.fav-ch .kp-block{margin:0 0 12px}
+
+/* ---------- 解答题（线代填空/计算，LaTeX 公式） ---------- */
+.calc-stem{font-size:15px;line-height:2;overflow-x:auto}
+.calc-stem .title{margin:6px 0}
+.blank-slot{display:inline-block;min-width:64px;height:1em;border-bottom:1.5px solid #1f2329;
+  vertical-align:baseline;margin:0 4px}
+.self-eval{margin-top:12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.self-eval .btn.self-ok{border-color:#00b42a;background:#e8ffea;color:#008a1e}
+.self-eval .btn.self-no{border-color:#f53f3f;background:#ffece8;color:#a11127}
+.self-eval .btn:disabled{cursor:default;opacity:.75}
+.why-txt mjx-container{margin:6px 0}
+mjx-container{overflow-x:auto;max-width:100%}
+
+/* ---------- 多选 / 填空 ---------- */
+.qtype{font-size:11.5px;padding:1px 7px;border-radius:10px;font-weight:400;margin-left:8px}
+.qtype.multi{background:#fff7e8;color:#a5670d;border:1px solid #ffd08a}
+.qtype.blank{background:#eaf2ff;color:#165dff;border:1px solid #bcdaff}
+.multi-submit{margin-top:11px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.hint-inline{font-size:12px;color:#86909c}
+.blank-box{display:flex;gap:8px;margin-top:11px;align-items:center}
+.blank-in{flex:1;min-width:0;padding:9px 12px;border:1px solid #d9dce3;border-radius:6px;font-size:14px}
+.blank-in:focus{outline:none;border-color:#94bfff}
+.opt.missed{border-style:dashed}
+.multi-submit .btn:disabled,.blank-box .btn:disabled{opacity:.5;cursor:default}
+
+/* ---------- 解析排版（Markdown 转出来的结构） ---------- */
+.why-txt h4{font-size:14px;margin:12px 0 5px;color:#165dff;font-weight:600}
+.why-txt h4:first-child{margin-top:0}
+.why-txt p{margin:6px 0}
+.why-txt ul{margin:6px 0;padding-left:20px}
+.why-txt li{margin:4px 0}
+.why-txt code{background:#f2f3f5;padding:1px 5px;border-radius:4px;font-size:13px}
+
+/* ---------- 章节页折叠头部 ---------- */
+.headbar{display:flex;align-items:center;gap:8px}
+.headbar .hb-title{font-size:15.5px;font-weight:600;flex:1;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.headbar .hb-prog{font-size:12px;color:#4e5969;background:#f7f8fa;border-radius:6px;
+  padding:4px 9px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.headbar .hb-prog:empty{display:none}
+.hb-fold{padding:5px 11px;border:1px solid #d9dce3;background:#fff;border-radius:6px;
+  font-size:13px;cursor:pointer;color:#4e5969;white-space:nowrap}
+.hb-fold:hover{background:#f2f3f5;border-color:#94bfff;color:#165dff}
+#headmore.fold-closed{display:none}
+body.head-open .kp-block{scroll-margin-top:340px}
+
+/* ---------- 文本题目（C语言题库） ---------- */.q .txt{white-space:pre-wrap;word-break:break-word}
+.q .stem .txt{font-size:14.5px;line-height:1.7;padding:2px 0;
+  font-family:Consolas,"Courier New","Microsoft YaHei",monospace}
+.q .opt .txt{flex:1;font-size:14px;line-height:1.5;
+  font-family:Consolas,"Courier New","Microsoft YaHei",monospace}
+.q .why-txt{font-size:13.5px;line-height:1.75;color:#4e5969;margin-top:8px;
+  padding:10px 12px;background:#f7f8fa;border-left:3px solid #165dff;border-radius:0 6px 6px 0}
+
+/* ---------- 收藏夹章节手风琴块 ---------- */
+.fav-acc{border:1px solid #e5e6eb;border-radius:10px;margin:0 0 12px;background:#fff;overflow:hidden}
+.fav-acc-head{display:flex;align-items:center;gap:10px;padding:12px 14px;cursor:pointer;background:#f7f8fa}
+.fav-acc-head:hover{background:#eef1f6}
+.fav-acc-title{font-weight:600;font-size:14.5px;color:#1f2329}
+.fav-acc-head .n{margin-left:auto;font-size:12.5px;color:#86909c}
+.fav-acc-head .arr{color:#86909c;font-size:12px;flex:none}
+.fav-acc-body{padding:2px 14px 12px}
+.fav-acc-body.fold-closed{display:none}
+#favbar{scroll-margin-top:70px}

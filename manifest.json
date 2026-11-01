@@ -1,0 +1,19 @@
+{
+  "name": "大学数学题库",
+  "short_name": "数学题库",
+  "description": "东北大学《大学数学网络学习平台》题库整理 · 登录后在手机、电脑间同步刷题进度",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1B3B6F",
+  "theme_color": "#1B3B6F",
+  "icons": [
+    { "src": "icons/icon-192.png",          "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png",          "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

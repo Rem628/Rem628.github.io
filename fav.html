@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>我的收藏夹</title>
+<link rel="stylesheet" href="app.css?v=20261031a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1B3B6F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="数学题库">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32">
+<link rel="icon" href="icons/favicon-16.png" sizes="16x16">
+<script>
+if ('serviceWorker' in navigator) {
+  addEventListener('load', function () {
+    navigator.serviceWorker.register('sw.js');
+  });
+}
+</script>
+</head>
+<body>
+<header>
+  <div class="headbar">
+    <span class="hb-title" id="hb-title">★ 我的收藏夹</span>
+    <span class="hb-prog" id="hb-prog"></span>
+    <button class="nav-toggle" onclick="toggleNav()">☰ 目录</button>
+    <button class="hb-fold" id="foldbtn" onclick="toggleHead()">▾ 展开</button>
+  </div>
+  <div id="headmore">
+    <div class="breadcrumb"><a href="index.html">题库首页</a> › 我的收藏</div>
+    <h1 id="title">★ 我的收藏夹</h1>
+    <div class="sub" id="sub">—</div>
+    <div class="toolbar">
+      <input type="search" id="kw" placeholder="在收藏中搜索…">
+      <input type="number" id="jumpno" placeholder="题号" min="1">
+      <button class="btn" onclick="jumpToNo()">跳转</button>
+      <span class="score" id="score">已答 <b>0</b>/0　正确率 <b>0%</b></span>
+      <button class="btn" onclick="toggleCram(this)">背题模式</button>
+      <button class="btn" onclick="toggleWrong(this)">只看错题</button>
+      <button class="btn" onclick="resetAll()" title="只清除收藏题的作答记录">重置作答</button>
+      <button class="btn danger" onclick="clearFav()" title="清空收藏列表">清空收藏</button>
+      <a class="btn" href="index.html">← 返回目录</a>
+      <span class="score" id="syncstate" style="margin-left:auto">—</span>
+      <button class="btn" onclick="manualRefresh(this)" title="推送本地进度并拉取云端最新数据">↻ 刷新</button>
+    </div>
+  </div>
+  <div id="navbox">
+    <div class="groupbar">
+      <span style="font-size:12.5px;color:#86909c;align-self:center">科目切换：</span>
+      <span id="tksw"></span>
+    </div>
+    <div class="groupbar">
+      <span style="font-size:12.5px;color:#86909c;align-self:center">题组：</span>
+      <span id="kpbtns"></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div id="favlist"></div>
+  <div class="empty" id="empty" style="display:none">
+    还没有收藏任何题目。<br>到章节页点题目右上角的 ☆ 就能收藏，之后在这里集中练习。
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<pre id="diag" style="font-size:10.5px;line-height:1.5;color:#86909c;background:#f7f8fa;border-radius:8px;padding:8px 10px;margin:10px auto;max-width:1100px;white-space:pre-wrap;word-break:break-all;display:none"></pre>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="qmap.js?v=20261031a"></script>
+<script src="meta.js?v=20261031a"></script>
+<script src="app.js?v=20261031a"></script>
+<script>
+/* ---------- 内建诊断：加载链路每一步都记录，出问题时面板可见 ---------- */
+const DIAG = [];
+function diag(m) {
+  DIAG.push(new Date().toLocaleTimeString("zh-CN", { hour12: false }) + "  " + m);
+  const d = document.getElementById("diag");
+  if (d) { d.style.display = "block"; d.textContent = "收藏夹加载诊断（排查用，可忽略）：\n" + DIAG.join("\n"); }
+}
+window.addEventListener("error", (e) => diag("JS错误: " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno));
+window.addEventListener("unhandledrejection", (e) => diag("Promise拒绝: " + ((e.reason && e.reason.message) || e.reason)));
+
+let favTk = null;   // 当前科目筛选：null = 全部科目
+
+/* 渲染：分组名称/顺序全部取自 META，与章节页（练习题库）完全一致；
+   「科目切换」「题组」与章节页同款交互（pickKp 筛选 + 滚动定位） */
+function renderFav() {
+  const box = document.getElementById("favlist");
+  const M = window.META || {};
+  const Q = window.QDATA || {};
+  const order = Object.keys(M);   // 科目顺序（首页/科目切换按钮共用）
+  const items = fav.map((id) => Q[id]).filter((q) => q && (!favTk || q.tk === favTk));
+
+  // 按 章 → 知识点 分组，章节/知识点顺序严格跟随 META（与章节页相同）
+  const byKp = {};
+  const kpCh = {};
+  const chOrder = [];
+  const tkLoop = favTk ? [favTk] : order.filter((tk) => M[tk]);
+  tkLoop.forEach((tk) => {
+    (M[tk].chapters || []).forEach((c) => {
+      const ks = [];
+      c.kps.forEach((k) => {
+        const list = items.filter((q) => q.kpid === k.id);
+        if (!list.length) return;
+        list.sort((a, b) => (a.i || 0) - (b.i || 0));
+        byKp[k.id] = list;
+        kpCh[k.id] = { ch: c.name, kpname: k.name };
+        ks.push(k.id);
+      });
+      if (ks.length) chOrder.push({ ch: c.name, kps: ks });
+    });
+  });
+
+  let html = "", n = 0;
+  chOrder.forEach(({ ch, kps }) => {
+    html += '<div class="fav-ch">' + escHtml(ch) + '</div>';
+    kps.forEach((kpid) => {
+      const list = byKp[kpid];
+      html += '<div class="kp-block" id="kp_' + kpid + '" data-kp="' + escHtml(kpid) + '">'
+        + '<div class="kp-title">' + escHtml(kpCh[kpid].kpname)
+        + ' <span style="font-weight:400;color:#86909c">（收藏 ' + list.length + ' 题）</span></div>';
+      list.forEach((q) => { n++; html += qHTML(q, n, "fav"); });
+      html += '</div>';
+    });
+  });
+  box.innerHTML = html;
+
+  // 头部信息（格式与章节页一致）
+  const kpCount = chOrder.reduce((s, c) => s + c.kps.length, 0);
+  const viewName = favTk ? ((M[favTk] || {}).name || "") : "全部科目";
+  document.getElementById("sub").textContent =
+    viewName + " · 共 " + n + " 题 · " + kpCount + " 个知识点组";
+  const c = document.getElementById("favcount");
+  if (c) c.textContent = fav.length;
+  const hp = document.getElementById("hb-prog");
+  if (hp) hp.textContent = "共 " + fav.length + " 题";
+
+  // 「科目切换」按钮（样式与章节页「本章切换」一致）
+  const byTkAll = {};
+  fav.forEach((id) => { const q = Q[id]; if (q) byTkAll[q.tk] = (byTkAll[q.tk] || 0) + 1; });
+  let sw = '<a class="btn" ' + (!favTk ? 'style="border-color:#165dff;color:#165dff" ' : '')
+    + 'onclick="switchTk(null)">全部</a> ';
+  order.forEach((tk) => {
+    if (!byTkAll[tk]) return;
+    const nm = (M[tk] && M[tk].name) || tk;
+    sw += '<a class="btn" ' + (favTk === tk ? 'style="border-color:#165dff;color:#165dff" ' : '')
+      + 'onclick="switchTk(\'' + tk + '\')">' + escHtml(nm) + '</a> ';
+  });
+  document.getElementById("tksw").innerHTML = sw;
+
+  // 「题组」按钮（格式照章节页：kp.name + 已答/收藏数）
+  let btns = "";
+  chOrder.forEach(({ ch, kps }) => {
+    kps.forEach((kpid) => {
+      const list = byKp[kpid];
+      const an = list.filter((q) => rec[q.q]).length;
+      btns += '<button class="gbtn" data-kp="' + escHtml(kpid) + '" onclick="pickKp(this,\'' + kpid + '\')">'
+        + escHtml(kpCh[kpid].kpname) + ' <span class="n">' + an + '/' + list.length + "</span></button>";
+    });
+  });
+  document.getElementById("kpbtns").innerHTML = btns;
+
+  paintAll();          // 回显作答 + 公式排版
+  applyFilters();      // 题组筛选 / 组统计 / 正确率 / empty 状态（与章节页同一套）
+  diag("渲染完成：显示 " + n + " 题（fav 总 " + fav.length + " 条）");
+}
+function switchTk(tk) {
+  favTk = tk || null;
+  renderFav();
+}
+
+/* 收藏夹按需加载：并行下载 + 进度提示 + 超时保护；
+   并把指向已删重复副本的收藏自动映射到保留的那份 */
+function loadScript(src) {
+  return new Promise((res) => {
+    let done = false;
+    const fin = (ok) => { if (!done) { done = true; res(ok); } };
+    const s = document.createElement("script");
+    s.src = src + (src.indexOf("?") >= 0 ? "&" : "?") + "v=" + (window.MB_VER || "1");
+    s.onload = () => fin(true);
+    s.onerror = () => fin(false);
+    setTimeout(() => fin(false), 15000);   // 15 秒超时（大切片慢网络也要给足时间）
+    document.head.appendChild(s);
+  });
+}
+async function loadFavData() {
+  diag("开始加载收藏数据；MB_VER=" + (window.MB_VER || "?") + "，收藏 " + fav.length + " 条");
+  // 归一化：去重后部分收藏指向已删副本，重定向到保留的那份
+  const QP = window.QREDIR || {};
+  let changed = false;
+  const seen = {};
+  fav = fav.map((qid) => {
+    const r = QP[qid] || qid;
+    if (r !== qid) changed = true;
+    return r;
+  }).filter((qid) => (seen[qid] ? false : (seen[qid] = 1, true)));
+  if (changed) { touchFav(); saveLocal(); scheduleSync(); }
+
+  const names = [...new Set(fav.map((qid) => (window.QMAP || {})[qid]).filter(Boolean))];
+  diag("QMAP=" + (window.QMAP ? "已加载(" + Object.keys(window.QMAP).length + "条)" : "缺失")
+    + "；涉及章节切片 " + names.length + " 个：" + names.join(","));
+  if (!names.length) { diag("!! 没有任何切片需要加载——qmap 缺失或收藏全部失效"); }
+  const box = document.getElementById("favlist");
+  const failed = [];
+  if (names.length > 2) {
+    box.innerHTML = '<div class="empty">正在加载收藏题目 <b id="lpn">0</b>/' + names.length + ' 个章节…</div>';
+  }
+  let done = 0;
+  await Promise.all(names.map((name) =>
+    loadScript("q_" + name + ".js").then((ok) => {
+      done++;
+      const lp = document.getElementById("lpn");
+      if (lp) lp.textContent = done;
+      diag((ok ? "✓ " : "✗ 超时/失败 ") + name);
+      if (!ok) {
+        // 弱网重试一次
+        diag("  重试 " + name);
+        return loadScript("q_" + name + ".js?r=" + Date.now()).then((ok2) => {
+          diag((ok2 ? "  ✓ 重试成功 " : "  ✗ 重试仍失败 ") + name);
+          if (!ok2) failed.push(name);
+        });
+      }
+    })
+  ));
+  diag("切片加载阶段结束：失败 " + failed.length + " 个；QDATA 题数 " + Object.keys(window.QDATA || {}).length);
+  // 失败必须可见且可重试，不能只靠一闪而过的 toast
+  if (failed.length) {
+    const list = document.getElementById("favlist");
+    if (list && !list.querySelector(".q")) {
+      list.innerHTML = '<div class="empty">部分章节加载失败（' + failed.join("、")
+        + '）。<br>请检查网络后 <a href="javascript:location.reload()">点击重试</a>，'
+        + '或点右上角「↻ 刷新」。</div>';
+    } else {
+      toast("有 " + failed.length + " 个章节加载失败，请点右上角「↻ 刷新」重试");
+    }
+  }
+}
+
+/* ---------- 顶部导航栏折叠（与章节页同一套交互） ---------- */
+function toggleHead() {
+  const m = document.getElementById("headmore");
+  const btn = document.getElementById("foldbtn");
+  const closed = m.classList.toggle("fold-closed");
+  btn.textContent = closed ? "▾ 展开" : "▴ 收起";
+}
+(function initHead() {
+  const narrow = window.innerWidth <= 768;
+  const m = document.getElementById("headmore");
+  const btn = document.getElementById("foldbtn");
+  if (narrow) {
+    m.classList.add("fold-closed");
+    btn.textContent = "▾ 展开";
+  } else {
+    btn.textContent = "▴ 收起";
+  }
+})();
+
+function clearFav() {
+  if (!fav.length) { toast("收藏夹本来就是空的"); return; }
+  if (!confirm("确定清空全部 " + fav.length + " 条收藏吗？（题目本身不会被删除）")) return;
+  fav = [];
+  touchFav();
+  saveLocal();
+  scheduleSync();
+  renderFav();
+  syncFavBtns();
+  applyFilters();
+  toast("收藏已清空");
+}
+
+window.addEventListener("DOMContentLoaded", async () => {
+  bindCommonControls();
+  await bootPage(renderFav, loadFavData);
+});
+</script>
+</body>
+</html>
