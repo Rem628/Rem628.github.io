@@ -22,6 +22,7 @@ if ('serviceWorker' in navigator) {
 </script>
 </head>
 <body>
+<div id="login-status" style="position:fixed;top:12px;left:0;right:0;text-align:center;color:#86909c;font-size:13px;z-index:9"></div>
 <header>
   <h1>大学数学题库</h1>
   <div class="sub">东北大学《大学数学网络学习平台》题库整理 · 登录后在手机、电脑间同步刷题进度</div>
@@ -113,17 +114,21 @@ if ('serviceWorker' in navigator) {
   try {
     if (typeof supabase === "undefined") throw new Error("supabase-js 未加载");
     initCloud();
-    show("正在登录…");
     let { data } = await supa.auth.getSession();
-    if (!data || !data.session) {
-      let resp = await supa.auth.signInWithPassword({ email: SUPA_CFG.email, password: SUPA_CFG.password });
-      if (resp.error) {
-        const r3 = await supa.auth.signUp({ email: SUPA_CFG.email, password: SUPA_CFG.password });
-        if (r3.error) throw r3.error;
-      }
+    if (data && data.session) {
+      // 已有会话：什么都不做，让 app.js 的 bootPage 正常渲染
+      const el = document.getElementById("login-status");
+      if (el) el.remove();
+      return;
+    }
+    show("正在登录…");
+    let resp = await supa.auth.signInWithPassword({ email: SUPA_CFG.email, password: SUPA_CFG.password });
+    if (resp.error) {
+      const r3 = await supa.auth.signUp({ email: SUPA_CFG.email, password: SUPA_CFG.password });
+      if (r3.error) throw r3.error;
     }
     show("登录成功，进入题库…");
-    location.reload();
+    location.reload();   // 仅首次登录后刷新一次（此后有会话，走上面的 return）
   } catch (e) {
     show("登录失败：" + String(e.message || e).slice(0, 90) + "（请检查 app.js 顶部 SUPA_CFG 配置）");
   }
