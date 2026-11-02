@@ -1,4 +1,20 @@
 window.MB_VER = "20261031a";
+
+/* ---------- 全局错误显示（诊断用）：任何脚本错误都显示在页面顶部 ---------- */
+function showFatal(m) {
+  try {
+    let el = document.getElementById("fatal-err");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "fatal-err";
+      el.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:99999;background:#ffe5e0;color:#8f1f11;font-size:12px;padding:10px 14px;white-space:pre-wrap;word-break:break-all;font-family:monospace";
+      (document.body || document.documentElement).appendChild(el);
+    }
+    el.textContent += m + "\n";
+  } catch (e) {}
+}
+window.addEventListener("error", (e) => showFatal("脚本错误: " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno));
+window.addEventListener("unhandledrejection", (e) => showFatal("异步错误: " + ((e.reason && e.reason.message) || e.reason)));
 /* =========================================================
    大学数学题库 · 在线版
    存储层：云数据库（跨设备同步）+ localStorage（本地缓存/离线兜底）
