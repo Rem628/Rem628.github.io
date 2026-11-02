@@ -85,6 +85,11 @@ if ('serviceWorker' in navigator) {
 <div id="appview" style="display:none">
   <div class="wrap">
     <div class="banner info" id="who"></div>
+    <div style="margin:0 0 12px;padding:10px 12px;background:#fffbe6;border:1px solid #ffe58f;border-radius:8px;font-size:13px;color:#614700">
+      <b>从旧版迁移数据：</b>
+      <input type="file" id="imp-file" accept=".json" style="font-size:12px;vertical-align:middle">
+      <span id="imp-msg"></span>
+    </div>
     <div style="margin:14px 0;display:flex;gap:8px;flex-wrap:wrap">
       <a class="btn" href="exam.html" style="border-color:#165dff;color:#165dff">📝 模拟练习</a>
       <a class="btn" href="review.html">📄 回看试卷</a>
@@ -107,7 +112,8 @@ if ('serviceWorker' in navigator) {
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="meta.js?v=20261031a"></script>
-<script src="app.js?v=20261031a"></script>
+<script src="app.js?v=20261101a"></script>
+<script src="fav_seed.js?v=20261101a"></script>
 <script>/* 单人模式：Supabase 固定账号自动登录（登录 UI 已隐藏） */
 (async () => {
   const show = (m) => { const el = document.getElementById("login-status"); if (el) el.textContent = m; };
@@ -127,6 +133,7 @@ if ('serviceWorker' in navigator) {
       // 已有会话：显示主视图 + 渲染科目卡片
       showApp();
       fillWho(data.session.user);
+      restoreFavSeed();
       renderCourses();
       return;
     }
@@ -138,16 +145,52 @@ if ('serviceWorker' in navigator) {
     }
     showApp();
     fillWho((await supa.auth.getSession()).data.session.user);
+    restoreFavSeed();
     renderCourses();
     show("登录成功，进入题库…");
   } catch (e) {
     show("登录失败：" + String(e.message || e).slice(0, 90) + "（请检查 app.js 顶部 SUPA_CFG 配置）");
   }
 })();
+document.addEventListener("change", (e) => {
+  if (e.target && e.target.id === "imp-file" && e.target.files[0]) importOldData(e.target.files[0]);
+});
 function fillWho(user) {
   const email = (user && user.email) || (user && user.id) || "已登录";
   const who = document.getElementById("who");
   if (who) who.textContent = "当前账号：" + email;
+}
+function restoreFavSeed() {
+  // 收藏恢复：当前 fav 为空且内置种子存在（旧站数据无法跨域名读取，用记录恢复）
+  try {
+    if (!Array.isArray(fav) || fav.length || typeof FAV_SEED === "undefined") return;
+    fav = FAV_SEED.slice();
+    touchFav(); saveLocal(); scheduleSync();
+    console.log("[迁移] 已恢复收藏 " + fav.length + " 条（来自旧版记录）");
+    const m = document.getElementById("imp-msg");
+    if (m) m.textContent = "已自动恢复收藏 " + fav.length + " 条";
+  } catch (e) {}
+}
+function importOldData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const data = JSON.parse(reader.result);
+      let moved = 0;
+      ["NEU-REC:", "NEU-FAV:", "NEU-EXAMS:", "NEU-EXDEL:", "NEU-RECDEL:", "NEU-FAVT:"].forEach((p) => {
+        for (const key in data) {
+          if (key.indexOf(p) === 0) { localStorage.setItem(key, data[key]); moved++; }
+        }
+      });
+      const m = document.getElementById("imp-msg");
+      if (m) m.textContent = "导入完成（" + moved + " 项），即将刷新…";
+      setTimeout(() => location.reload(), 1200);
+    } catch (e) {
+      const m = document.getElementById("imp-msg");
+      if (m) m.textContent = "导入失败：" + e.message;
+    }
+  };
+  reader.readAsText(file);
 }
 function renderCourses() {
   const box = document.getElementById("courses");
