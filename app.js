@@ -11,10 +11,10 @@ window.MB_VER = "20261031a";
    anonKey → anon public key
    email/password → Authentication → Users 里创建的单人账号 */
 const SUPA_CFG = {
-  url: "",
-  anonKey: "",
-  email: "me@mathbank.app",
-  password: "",
+  url: "https://pgpaegrihdhynevpyfes.supabase.co",
+  anonKey: "sb_publishable_pD0k8jn6vDbZK4DYEaFesA_Qi5jwEdD",
+  email: "2974675585@qq.com",
+  password: "zjr640210",
 };
 
 let supa = null;
