@@ -114,11 +114,18 @@ if ('serviceWorker' in navigator) {
   try {
     if (typeof supabase === "undefined") throw new Error("supabase-js 未加载");
     initCloud();
-    let { data } = await supa.auth.getSession();
-    if (data && data.session) {
-      // 已有会话：什么都不做，让 app.js 的 bootPage 正常渲染
+    const showApp = () => {
+      const av = document.getElementById("authview");
+      const ap = document.getElementById("appview");
+      if (av) av.style.display = "none";
+      if (ap) ap.style.display = "";
       const el = document.getElementById("login-status");
       if (el) el.remove();
+    };
+    let { data } = await supa.auth.getSession();
+    if (data && data.session) {
+      // 已有会话：显示主视图，app.js 的 bootPage 正常渲染
+      showApp();
       return;
     }
     show("正在登录…");
@@ -127,8 +134,9 @@ if ('serviceWorker' in navigator) {
       const r3 = await supa.auth.signUp({ email: SUPA_CFG.email, password: SUPA_CFG.password });
       if (r3.error) throw r3.error;
     }
+    showApp();
     show("登录成功，进入题库…");
-    location.reload();   // 仅首次登录后刷新一次（此后有会话，走上面的 return）
+    location.reload();   // 仅首次登录后刷新一次（此后走上面的已有会话分支）
   } catch (e) {
     show("登录失败：" + String(e.message || e).slice(0, 90) + "（请检查 app.js 顶部 SUPA_CFG 配置）");
   }
