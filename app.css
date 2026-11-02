@@ -215,3 +215,10 @@ body.head-open .kp-block{scroll-margin-top:340px}
 .fav-acc-body{padding:2px 14px 12px}
 .fav-acc-body.fold-closed{display:none}
 #favbar{scroll-margin-top:70px}
+
+/* Mobile interaction and accessible status feedback. */
+[hidden]{display:none!important}button,a.btn,summary{touch-action:manipulation}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #165dff;outline-offset:3px}.btn:disabled{opacity:.55;cursor:wait}.authbox input{box-sizing:border-box;max-width:100%}select{max-width:100%;min-height:44px}.banner p{line-height:1.7}.toolbar{gap:8px;flex-wrap:wrap}#import-confirm{margin:12px 0}#syncstate{overflow-wrap:anywhere}.wrap{padding-bottom:max(24px,env(safe-area-inset-bottom))}.q img{max-width:100%;height:auto}@media(max-width:768px){.btn,.fav-btn,.nav-toggle,.hb-fold,.gbtn,.peek button,summary{min-height:44px}.fav-btn{min-width:44px}.chip{min-height:44px;display:inline-flex;align-items:center}.field input{font-size:16px}input[type=file]{max-width:100%}.toolbar>*{max-width:100%}}@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+@media(max-height:500px){header{position:static}.kp-block,body.head-open .kp-block{scroll-margin-top:16px}}
+
+.opt{min-width:0}.opt img{min-width:0;max-width:calc(100% - 58px);object-fit:contain}.opt .txt{min-width:0;overflow-wrap:anywhere}

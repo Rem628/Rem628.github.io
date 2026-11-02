@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>回看试卷</title>
-<link rel="stylesheet" href="app.css?v=20261031a">
+<link rel="stylesheet" href="app.css?v=20261102b">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B3B6F">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <script>
 if ('serviceWorker' in navigator) {
-  addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
+  addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 </script>
 </head>
@@ -31,10 +31,10 @@ if ('serviceWorker' in navigator) {
   <div id="list"></div>
 </div>
 <div class="toast" id="toast"></div>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="qmap.js?v=20261031a"></script>
-<script src="meta.js?v=20261031a"></script>
-<script src="app.js?v=20261031a"></script>
+<script src="vendor/supabase.js"></script>
+<script src="qmap.js?v=20261102b"></script>
+<script src="meta.js?v=20261102b"></script>
+<script src="app.js?v=20261102b"></script>
 <script>
 function render() {
   const M = window.META || {};   // 科目名映射（此前漏定义，有试卷时渲染直接抛错导致列表空白）
@@ -44,10 +44,11 @@ function render() {
     box.innerHTML = "";
     return;
   }
+  document.getElementById("empty").style.display="none";
   box.innerHTML = exams.map((e) => {
     const grade = e.graded ? (e.pending ? "待自评" : "已判分") : "未交卷";
     return '<div class="tk-card" style="cursor:pointer" onclick="location.href=\'exam.html?review=' + e.id + '\'">'
-      + '<div class="tk-head"><span class="tk-name">' + (M[e.tk] ? M[e.tk].name : e.sub)
+      + '<div class="tk-head"><span class="tk-name">' + escHtml(M[e.tk] ? M[e.tk].name : e.sub)
       + ' · 模拟卷</span><span class="tag">' + grade + "</span>"
       + '<button class="btn" style="margin-left:auto;padding:5px 12px;font-size:12.5px;color:#d03050;border-color:#f5b3bf"'
       + ' onclick="delExam(event,\'' + e.id + '\')">删除</button></div>'

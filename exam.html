@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>模拟练习</title>
-<link rel="stylesheet" href="app.css?v=20261031a">
+<link rel="stylesheet" href="app.css?v=20261102b">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#1B3B6F">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12,7 +12,7 @@
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32">
 <script>
 if ('serviceWorker' in navigator) {
-  addEventListener('load', function () { navigator.serviceWorker.register('sw.js'); });
+  addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
 }
 </script>
 <style>
@@ -84,10 +84,10 @@ if ('serviceWorker' in navigator) {
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="meta.js?v=20261031a"></script>
-<script src="qmap.js?v=20261031a"></script>
-<script src="app.js?v=20261031a"></script>
+<script src="vendor/supabase.js"></script>
+<script src="meta.js?v=20261102b"></script>
+<script src="qmap.js?v=20261102b"></script>
+<script src="app.js?v=20261102b"></script>
 <script>
 const QS = new URLSearchParams(location.search);
 const M = window.META || {};
@@ -146,10 +146,11 @@ function checkAll(on) {
 /* ---------- 加载勾选章节的题目切片 ---------- */
 function loadScript(src) {
   return new Promise((res) => {
+    const timeout=setTimeout(()=>{s.remove();res(false)},15000);
     const s = document.createElement("script");
     s.src = src + (src.indexOf("?") >= 0 ? "&" : "?") + "v=" + (window.MB_VER || "1");
-    s.onload = () => res(true);
-    s.onerror = () => res(false);
+    s.onload = () => {clearTimeout(timeout);res(true);};
+    s.onerror = () => {clearTimeout(timeout);s.remove();res(false);};
     document.head.appendChild(s);
   });
 }
@@ -176,6 +177,8 @@ function drawUniform(groups, n) {
 
 /* ---------- 第二步：组卷 ---------- */
 async function startExam() {
+  if(state.loading)return;state.loading=true;
+  try {
   const kps = [...document.querySelectorAll(".ck-kp")].filter((k) => k.checked);
   if (!kps.length) { toast("至少勾选一个知识点"); return; }
   const cis = [...new Set(kps.map((k) => k.dataset.ci))];
@@ -191,9 +194,7 @@ async function startExam() {
   const choice = pool.filter((q) => qType(q) !== "calc");
   const blank  = pool.filter((q) => qType(q) === "calc" && q.tag === "填空");
   const calc   = pool.filter((q) => qType(q) === "calc" && q.tag === "计算");
-  if (choice.length + blank.length + calc.length < 25 && choice.length < 25) {
-    toast("所选范围题目不足 25 道，请多勾选一些章节"); return;
-  }
+
 
   // 官方实测配比：线代 19 选择 + 3 填空 + 1 计算 = 23 题；高数纯选择 25 道。
   // 某类题库存不足时名额让给选择题
@@ -227,12 +228,14 @@ async function startExam() {
     graded: false,
     total: qs.length * 4,
   };
-  renderPaper(false);
+  saveDraft();renderPaper(false);
+  } finally {state.loading=false;}
 }
 
 /* ---------- 渲染试卷 ---------- */
 function renderPaper(readonly) {
   const ex = state.exam;
+  state.readonly=readonly;
   const isXD = ex.tk === "XD";
   document.getElementById("p-head").textContent =
     (readonly ? "回看试卷 · " : "模拟试卷 · ") + ex.sub;
@@ -247,7 +250,7 @@ function renderPaper(readonly) {
   }
   let html = "", i = 0;
   const chosen = new Set(ex.qids);
-  state.questions = Object.values(window.QDATA || {}).filter((q) => chosen.has(q.q));
+  state.questions = ex.qids.map(id=>(window.QDATA||{})[id]).filter(Boolean);
   parts.forEach(([title, filter]) => {
     const list = state.questions.filter(filter);
     if (!list.length) return;
@@ -265,12 +268,22 @@ function renderPaper(readonly) {
   // 画进试卷里（绿勾红叉+锁死+弹解析）。模拟卷是全新作答，只排版公式。
   // 回看/已交卷状态按试卷自己的答案（exam.ans）回显，见下方分支。
   typesetMath(document.body);
+  syncFavBtns();
+  document.querySelectorAll("#runlist .self-eval").forEach(el=>el.style.display=ex.graded?"":"none");
+  document.querySelectorAll("#runlist .multi-submit,#runlist .blank-box button").forEach(el=>el.style.display="none");
+  if(!readonly&&!ex.graded){
+    document.querySelectorAll('#runlist .q').forEach(el=>{
+      const a=ex.ans[el.dataset.qid]||'';
+      el.querySelectorAll('input[type=radio],input[type=checkbox]').forEach(i=>i.checked=a.includes(i.value));
+      const input=el.querySelector('.blank-in');if(input)input.value=a;
+    });
+  }
   // 回显已作答（回看模式）
   if (readonly || ex.graded) {
     document.querySelectorAll("#runlist .q").forEach((el) => {
       const qid = el.getAttribute("data-qid");
       const u = ex.ans[qid];
-      if (u != null && u !== "") paintAnswered(el, u);
+      if (el.dataset.type !== "calc" || (u != null && u !== "")) paintAnswered(el, u || "");
       else if (el.getAttribute("data-type") === "calc") {
         const why = el.querySelector(".why");
         if (why) why.classList.add("show");
@@ -320,6 +333,7 @@ function judge(el, user) {
   return user !== "" && user === ans;
 }
 function submitExam() {
+  if(!state.exam || state.exam.graded)return;
   const els = [...document.querySelectorAll("#runlist .q")];
   let unanswered = 0;
   els.forEach((el) => {
@@ -333,6 +347,8 @@ function submitExam() {
     state.exam.ans[el.getAttribute("data-qid")] = u == null ? "" : u;
   });
   state.exam.graded = true;
+  localStorage.removeItem("NEU-DRAFT:"+_ukey);
+  document.querySelectorAll("#runlist .self-eval").forEach(el=>el.style.display="");
   saveExam();
   let score = 0, right = 0, pending = 0;
   try {
@@ -366,6 +382,7 @@ function submitExam() {
 }
 /* 主观题（线代计算）自评：官方为 12 分/题的大题，本卷按用户规则折算 4 分 */
 function examSelf(btn, ok) {
+  if(!state.exam?.graded){toast("请先交卷，再对照解析自评");return;}
   const el = btn.closest(".q");
   const qid = el.getAttribute("data-qid");
   state.exam.ans[qid] = ok ? "ok" : "no";
@@ -382,16 +399,15 @@ function examSelf(btn, ok) {
     const qid = e2.getAttribute("data-qid");
     const a = state.exam.ans[qid];
     if (t === "calc") {
-      if (a === "ok") { score += 4; right++; } else if (a === "no") pending++;
-      else pending++;
+      if (a === "ok") { score += 4; right++; } else if (a !== "no") pending++;
       return;
     }
-    if (a && a === e2.getAttribute("data-ans")) { score += 4; right++; }
+    if (a && answerCorrect(e2.dataset.type,a,e2.dataset.ans)) { score += 4; right++; }
   });
   state.exam.score = score;
   state.exam.right = right;
   state.exam.pending = pending;
-  state.exam.graded = pending === 0;
+  state.exam.graded = true;
   updateScorebox();
   showScoreCard();
   saveExam();
@@ -399,12 +415,19 @@ function examSelf(btn, ok) {
 
 /* ---------- 试卷保存与同步 ---------- */
 function saveExam() {
+  state.exam.updatedAt=Date.now();
   const i = exams.findIndex((e) => e.id === state.exam.id);
   if (i >= 0) exams[i] = state.exam; else exams.unshift(state.exam);
   saveLocal();
   syncExams();   // 同步函数在 app.js（回看页删除记录也用它）
 }
 
+function saveDraft(){
+  if(!state.exam||state.exam.graded)return;
+  document.querySelectorAll('#runlist .q').forEach(el=>{const a=collect(el);if(a!==null)state.exam.ans[el.dataset.qid]=a;});
+  try{localStorage.setItem('NEU-DRAFT:'+_ukey,JSON.stringify(state.exam));}catch(e){toast('试卷草稿保存失败，请勿关闭页面并尽快交卷');}
+}
+document.addEventListener('input',saveDraft);document.addEventListener('change',saveDraft);window.addEventListener('pagehide',saveDraft);
 /* ---------- 启动 ---------- */
 window.addEventListener("DOMContentLoaded", async () => {
   bindCommonControls();
@@ -414,6 +437,7 @@ window.addEventListener("DOMContentLoaded", async () => {
     const s = await requireLogin();
     if (!s) return;
     loadForUser(s);
+    if(!exams.some(e=>e.id===rid)){try{await pullState();}catch(e){}}
     const ex = exams.find((e) => e.id === rid);
     if (!ex) {
       document.getElementById("view-setup").style.display = "none";
@@ -425,7 +449,10 @@ window.addEventListener("DOMContentLoaded", async () => {
     state.exam = ex;
     state.tk = ex.tk;
     const need = [...new Set(ex.qids.map((qid) => (window.QMAP || {})[qid]).filter(Boolean))];
-    for (const name of need) await loadScript("q_" + name + ".js");
+    for (const name of need) {
+      if(!await loadScript('q_'+name+'.js')){showView('paper');document.getElementById('runlist').innerHTML='<p class="banner warn">试卷题目加载失败，请联网后刷新重试。原记录未改变。</p>';return;}
+    }
+    if(ex.qids.some(id=>!window.QDATA?.[id])){showView('paper');document.getElementById('runlist').textContent='部分题目无法匹配，原试卷已保留，请导出备份后检查。';return;}
     renderPaper(true);
     return;
   }
@@ -433,6 +460,13 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (!s) return;
   loadForUser(s);
   buildSubjects();
+  const draft=_read('NEU-DRAFT:'+_ukey,null);
+  if(draft&&validExam(draft)&&!draft.graded){
+    const banner=document.createElement('div');banner.className='banner info';banner.textContent='有一份未完成的模拟卷。';
+    const resume=document.createElement('button');resume.className='btn';resume.textContent='继续上次练习';
+    resume.onclick=async()=>{resume.disabled=true;try{const names=[...new Set(draft.qids.map(id=>window.QMAP[id]).filter(Boolean))];for(const name of names)if(!await loadScript('q_'+name+'.js'))throw Error('题目加载失败');if(draft.qids.some(id=>!window.QDATA?.[id]))throw Error('部分题目无法匹配');state.exam=draft;state.tk=draft.tk;renderPaper(false);}catch(e){toast(e.message);}finally{resume.disabled=false;}};
+    banner.appendChild(resume);document.getElementById('setup1').prepend(banner);
+  }
 });
 </script>
 </body>

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>章节练习</title>
-<link rel="stylesheet" href="app.css?v=20261031a">
+<link rel="stylesheet" href="app.css?v=20261102b">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="theme-color" content="#1B3B6F">
@@ -16,7 +16,7 @@
 <script>
 if ('serviceWorker' in navigator) {
   addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js');
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
 </script>
@@ -70,9 +70,9 @@ if ('serviceWorker' in navigator) {
 
 <div class="toast" id="toast"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="meta.js?v=20261031a"></script>
-<script src="app.js?v=20261031a"></script>
+<script src="vendor/supabase.js"></script>
+<script src="meta.js?v=20261102b"></script>
+<script src="app.js?v=20261102b"></script>
 <script>
 const QS = new URLSearchParams(location.search);
 const TK = (QS.get("tk") || "GS").toUpperCase();
@@ -83,10 +83,12 @@ let chapter = null, cache = null;
 // 弱网下偶发失败：自动重试三次，重试时带时间戳绕开可能的坏缓存
 function loadChapterData() {
   const once = (bust) => new Promise((res) => {
+    if(!window.META?.[TK]?.chapters[CI]){res(false);return;}
     const s = document.createElement("script");
+    const timer=setTimeout(()=>{s.remove();res(false)},15000);
     s.src = "q_" + TK + "_" + CI + ".js?v=" + (window.MB_VER || "1") + (bust ? "&r=" + Date.now() : "");
-    s.onload = () => res(true);
-    s.onerror = () => res(false);
+    s.onload = () => {clearTimeout(timer);res(true);};
+    s.onerror = () => {clearTimeout(timer);s.remove();res(false);};
     document.head.appendChild(s);
   });
   return (async () => {

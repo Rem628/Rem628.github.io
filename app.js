@@ -1,4 +1,4 @@
-window.MB_VER = "20261031a";
+window.MB_VER = "20261102b";
 
 /* ---------- 全局错误显示（诊断用）：任何脚本错误都显示在页面顶部 ---------- */
 function showFatal(m) {
@@ -27,324 +27,236 @@ window.addEventListener("unhandledrejection", (e) => showFatal("异步错误: " 
    anonKey → anon public key
    email/password → Authentication → Users 里创建的单人账号 */
 const SUPA_CFG = {
-  url: "https://pgpaegrihdhynevpyfes.supabase.co",
-  anonKey: "sb_publishable_pD0k8jn6vDbZK4DYEaFesA_Qi5jwEdD",
-  email: "2974675585@qq.com",
-  password: "zjr640210",
+  "url": "https://pgpaegrihdhynevpyfes.supabase.co",
+  "anonKey": "sb_publishable_pD0k8jn6vDbZK4DYEaFesA_Qi5jwEdD"
 };
-
+/* Local-first progress, persistent sign-in and conflict-aware synchronization. */
 let supa = null;
-function initCloud() {
-  if (supa) return supa;
-  if (!SUPA_CFG.url || !SUPA_CFG.anonKey) {
-    throw new Error("Supabase 未配置：请在 app.js 顶部 SUPA_CFG 填入 url 与 anonKey");
-  }
-  if (typeof supabase === "undefined") {
-    throw new Error("supabase-js 未加载成功，请刷新页面或检查网络");
-  }
-  supa = supabase.createClient(SUPA_CFG.url, SUPA_CFG.anonKey);
-  return supa;
-}
-
-/* ---------- 轻量提示 ---------- */
+const LOCAL_UID = '2109519881526317056';
+let CLOUD_DOWN = false;
+let rec = {}, fav = [], exams = [], exDel = {}, recDel = {}, favOps = {};
+let _seedRestored=false;
+let _ukey = '', _favLocalT = 0, _cloudExams = [], _syncT = null;
+let _syncPromise = null, _syncAgain = false, _storageFailed = false;
 let _toastT;
 function toast(msg) {
-  let t = document.getElementById("toast");
-  if (!t) {
-    t = document.createElement("div");
-    t.id = "toast";
-    t.className = "toast";
-    document.body.appendChild(t);
-  }
-  t.textContent = msg;
-  t.classList.add("show");
-  clearTimeout(_toastT);
-  _toastT = setTimeout(() => t.classList.remove("show"), 2800);
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id='toast'; el.className='toast'; document.body.appendChild(el); }
+  el.textContent=msg; el.classList.add('show'); clearTimeout(_toastT);
+  _toastT=setTimeout(()=>el.classList.remove('show'),3500);
 }
-
-/* 版本自检：每次启动问服务器要最新版本号（带时间戳绕开一切缓存），
-   和本机记录不一致就清空全部缓存并刷新——解决「改版后用户端一直拿旧缓存」的问题 */
-async function checkUpdate() {
-  try {
-    const r = await fetch("version.json?t=" + Date.now(), { cache: "no-store" });
-    if (!r.ok) return false;
-    const v = (await r.json()).v;
-    if (!v) return false;
-    if (localStorage.getItem("mb_ver") === v) return false;
-    localStorage.setItem("mb_ver", v);
-    if (window.caches && caches.keys) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-    }
-    location.reload();
-    return true;
-  } catch (e) { return false; }
+function setSyncLabel(text) {
+  const el=document.getElementById('syncstate');
+  if(el) el.textContent=_storageFailed ? '本机保存失败，请立即导出备份' : text;
 }
-
-/* ---------- 会话 ---------- */
-/* 无云模式：云端不可用（额度停用/离线）时，自动降级为纯本机运行，
-   以原账号 ID 读写本地缓存，收藏/作答/试卷数据无缝衔接不丢失 */
-const LOCAL_UID = "2109519881526317056";
-let CLOUD_DOWN = false;
+function _read(k,d) { try { const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; } catch(e) { return d; } }
+function userKey(s) { const u=s?.user||{}; return String(u.id||u.sub||u.email||u.phone||'anon').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,64); }
+function localSession() {
+  const last=_read('mb_last_user',null);
+  if(last?.id) return {user:last,local:true};
+  // Keep an existing Supabase sign-in after upgrading the website.
+  const token=_read('sb-'+new URL(SUPA_CFG.url).hostname.split('.')[0]+'-auth-token',null);
+  if(token?.user?.id) return {user:{id:token.user.id,email:token.user.email},local:true};
+  return {user:{id:LOCAL_UID},local:true};
+}
+function initCloud() {
+  if(supa) return supa;
+  if(!window.supabase) throw Error('登录组件暂不可用，仍可使用本地题库');
+  supa=window.supabase.createClient(SUPA_CFG.url,SUPA_CFG.anonKey,{
+    auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false},
+    global:{fetch:(input,init={})=>{
+      const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),10000);
+      const abort=()=>ctl.abort();
+      if(init.signal?.aborted) ctl.abort(); else init.signal?.addEventListener('abort',abort,{once:true});
+      return fetch(input,{...init,signal:ctl.signal}).finally(()=>{clearTimeout(timer);init.signal?.removeEventListener('abort',abort);});
+    }}});
+  return supa;
+}
 async function getSession() {
-  if (CLOUD_DOWN) return { user: { id: LOCAL_UID } };
   try {
-    initCloud();
-    let { data } = await supa.auth.getSession();
-    if (!data || !data.session) {
-      // 固定单人账号自动登录；账号不存在时自动注册
-      let sess = null, err = null;
-      const resp = await supa.auth.signInWithPassword({ email: SUPA_CFG.email, password: SUPA_CFG.password });
-      sess = resp.data; err = resp.error;
-      if (err || !sess || !sess.session) {
-        const r3 = await supa.auth.signUp({ email: SUPA_CFG.email, password: SUPA_CFG.password });
-        sess = r3.data; err = r3.error;
-      }
-      if (err || !sess || !sess.session) throw new Error((err && err.message) || "登录失败");
-      ({ data } = await supa.auth.getSession());
+    if(navigator.onLine===false) throw Error('offline');
+    const {data,error}=await initCloud().auth.getSession();
+    if(error) throw error;
+    if(data?.session?.user) {
+      const user={id:data.session.user.id,email:data.session.user.email};
+      localStorage.setItem('mb_last_user',JSON.stringify(user));
+      CLOUD_DOWN=false; return {user};
     }
-    if (!data || !data.session || !data.session.user) return null;
-    return { user: data.session.user };
-  } catch (e) {
-    CLOUD_DOWN = true;
-    setSyncLabel("离线模式：仅保存在本机（" + String(e.message || e).slice(0, 50) + "）");
-    return { user: { id: LOCAL_UID } };
-  }
+  } catch(e) { /* Retain the same local account when token refresh cannot reach the server. */ }
+  CLOUD_DOWN=true; return localSession();
 }
-async function requireLogin() {
-  const s = await getSession();
-  if (!s) {
-    location.href = "index.html";
-    return null;
-  }
-  return s;
+async function requireLogin() { return localSession(); }
+function validObject(v) { return !!v && typeof v==='object' && !Array.isArray(v); }
+function safeId(k) { return typeof k==='string' && k.length>0 && k.length<=160 && !['__proto__','constructor','prototype'].includes(k) && /^[A-Za-z0-9_-]+$/.test(k); }
+function mapValues(v,check) {
+  const out={}; if(!validObject(v)) return out;
+  for(const [k,x] of Object.entries(v)) if(safeId(k)&&check(x)) out[k]=x;
+  return out;
 }
-
-/* ---------- 本地缓存（按账号隔离） ----------
-   同一台设备换账号登录时，必须各自用自己的缓存，
-   否则上一个账号的答题记录会被下一个账号看到、甚至被同步进对方的云端。 */
-function _read(k, d) { try { const v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
-let rec = {}, fav = [];
-let exams = [];          // 模拟练习的历史试卷（回看试卷）
-let _cloudExams = [];    // 最近一次从云端拉到的 exams，推送时做合并基准
-let exDel = {};          // 已删除试卷的墓碑标记 {examId: 删除时间}，防止删除后被云端合并复活
-let recDel = {};         // 已重置作答的墓碑标记 {qid: 重置时间}，防止重置后被云端合并复活
-let _ukey = "";
-function userKey(s) {
-  const u = (s && s.user) || {};
-  // 会话里稳定存在的是 id（= auth 的 sub）；email 在 user.raw.email，且可能为空
-  const raw = u.id || u.sub || u.email || u.phone || "anon";
-  return String(raw).replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 64);
+function stamp(v) { return Number.isFinite(v)&&v>=0; }
+function validExam(e) {
+  return validObject(e)&&safeId(e.id)&&stamp(e.ts)&&['GS','XD','GL','CY'].includes(e.tk||'GS')
+    &&Array.isArray(e.qids)&&e.qids.every(safeId)&&validObject(e.ans)
+    &&Object.entries(e.ans).every(([k,v])=>safeId(k)&&typeof v==='string')
+    &&stamp(e.score||0)&&stamp(e.total||0)&&stamp(e.right||0)&&stamp(e.pending||0)
+    &&(e.updatedAt===undefined||stamp(e.updatedAt));
 }
-
-/* 一次性迁移：WorkBuddy 云停用前的本机数据（旧账号 key）搬到新后端的账号 key 下。
-   只在「新 key 尚未初始化 且 旧 key 有数据」时执行一次，绝不覆盖新数据。 */
-function migrateOldLocalData(newKey) {
-  try {
-    const oldKey = "2109519881526317056";
-    if (newKey === oldKey) return;
-    if (localStorage.getItem("NEU-REC:" + newKey) !== null) return;
-    if (localStorage.getItem("NEU-REC:" + oldKey) === null) return;
-    ["NEU-REC:", "NEU-FAV:", "NEU-EXAMS:", "NEU-EXDEL:", "NEU-RECDEL:", "NEU-FAVT:"].forEach((p) => {
-      const v = localStorage.getItem(p + oldKey);
-      if (v !== null) localStorage.setItem(p + newKey, v);
-    });
-    console.log("[数据迁移] 本机收藏/作答/试卷已迁移到新账号存储");
-  } catch (e) {}
+function cleanState(p={}) {
+  return {
+    rec:mapValues(p.rec,v=>typeof v==='string'||(validObject(v)&&typeof v.a==='string'&&stamp(v.t||0))),
+    fav:Array.isArray(p.fav)?[...new Set(p.fav.filter(safeId))]:[],
+    exams:Array.isArray(p.exams)?p.exams.filter(validExam):[],
+    exdel:mapValues(p.exdel,stamp),recdel:mapValues(p.recdel,stamp),
+    favOps:mapValues(p.favOps,v=>validObject(v)&&typeof v.on==='boolean'&&stamp(v.t)),
+    favT:stamp(p.favT)?p.favT:(stamp(p.ts)?p.ts:0),ts:stamp(p.ts)?p.ts:0,
+    seedRestored:p.seedRestored===true
+  };
+}
+function snapshot() { return {rec,fav,exams,exdel:exDel,recdel:recDel,favOps,favT:_favLocalT,seedRestored:_seedRestored||_read('mb_seed:'+_ukey,false),ts:Date.now(),schema:2}; }
+function assignState(p) {
+  _seedRestored=p.seedRestored===true;rec=p.rec;fav=p.fav;exams=p.exams;exDel=p.exdel;recDel=p.recdel;favOps=p.favOps;_favLocalT=p.favT;
 }
 function loadForUser(s) {
-  const k = userKey(s);
-  if (k === _ukey) return;              // 同一账号重复登录，保留现有内存数据
-  _ukey = k;
-  rec = _read("NEU-REC:" + k, {});
-  fav = _read("NEU-FAV:" + k, []);
-  if (!Array.isArray(fav)) fav = [];
-  exams = _read("NEU-EXAMS:" + k, []);
-  if (!Array.isArray(exams)) exams = [];
-  exDel = _read("NEU-EXDEL:" + k, {}) || {};
-  recDel = _read("NEU-RECDEL:" + k, {}) || {};
-  _favLocalT = _read("NEU-FAVT:" + k, 0) || 0;
-  saveLocal();
+  const k=userKey(s); if(k===_ukey) return;
+  _ukey=k;_cloudExams=[];
+  let p=_read('NEU-STATE:'+k,null);
+  if(!p) p={rec:_read('NEU-REC:'+k,{}),fav:_read('NEU-FAV:'+k,[]),exams:_read('NEU-EXAMS:'+k,[]),exdel:_read('NEU-EXDEL:'+k,{}),recdel:_read('NEU-RECDEL:'+k,{}),favT:_read('NEU-FAVT:'+k,0)};
+  assignState(cleanState(p));
 }
+function migrateOldLocalData() { /* Legacy account migration is explicit through the import controls. */ }
 function saveLocal() {
-  if (!_ukey) return;
+  if(!_ukey) return false;
   try {
-    localStorage.setItem("NEU-REC:" + _ukey, JSON.stringify(rec));
-    localStorage.setItem("NEU-FAV:" + _ukey, JSON.stringify(fav));
-    localStorage.setItem("NEU-EXAMS:" + _ukey, JSON.stringify(exams));
-    localStorage.setItem("NEU-EXDEL:" + _ukey, JSON.stringify(exDel));
-    localStorage.setItem("NEU-RECDEL:" + _ukey, JSON.stringify(recDel));
-  } catch (e) {}
-}
-/* 删除一份试卷记录：本地移除 + 打删除标记（同步时云端那份也不会复活） */
-function deleteExam(id) {
-  exams = exams.filter((e) => e.id !== id);
-  exDel[id] = Date.now();
-  saveLocal();
-  syncExams();
-}
-/* 模拟练习试卷合并：按 id 去重，冲突取时间新的一方 */
-function mergeExams(a, b) {
-  const m = {};
-  (a || []).concat(b || []).forEach((e) => {
-    if (e && e.id && (!m[e.id] || (e.ts || 0) > (m[e.id].ts || 0))) m[e.id] = e;
-  });
-  return Object.values(m).sort((x, y) => (y.ts || 0) - (x.ts || 0));
-}
-/* 收藏在本机最后一次变动的时间：云端合并时用它判断「谁新听谁的」 */
-let _favLocalT = 0;
-function touchFav() {
-  _favLocalT = Date.now();
-  if (_ukey) { try { localStorage.setItem("NEU-FAVT:" + _ukey, String(_favLocalT)); } catch (e) {} }
-}
-function recAns(id) { const v = rec[id]; return v && typeof v === "object" ? v.a : v; }
-function recTime(id) { const v = rec[id]; return v && typeof v === "object" ? v.t || 0 : 0; }
-function isFav(qid) { return fav.indexOf(qid) >= 0; }
-
-/* ---------- 云端同步 ---------- */
-let _syncT = null, _syncing = false;
-function setSyncLabel(text) {
-  const el = document.getElementById("syncstate");
-  if (el) el.textContent = text;
-}
-async function pullState() {
-  if (CLOUD_DOWN) { setSyncLabel("离线模式：仅保存在本机"); return true; }
-  initCloud();
-  const { data, error } = await supa.from("user_state").select("payload").maybeSingle();
-  if (error) { setSyncLabel("读取云端进度失败"); return false; }
-  if (!data || !data.payload) {
-    setSyncLabel("云端暂无进度");
-    await pushState();              // 首次使用：把本地已有的进度推上去
-    return false;
+    // One atomic storage entry is authoritative. Legacy keys remain readable by old exports.
+    localStorage.setItem('NEU-STATE:'+_ukey,JSON.stringify(snapshot()));
+    _storageFailed=false;
+  } catch(e) {
+    _storageFailed=true;setSyncLabel('');toast('设备存储已满或不可用，本次修改尚未保存。请立即导出备份。');return false;
   }
-  const p = data.payload;
-  const cloudT = p.ts || 0;
-  // 作答记录：按作答时间合并，两边都不丢；
-  // 但「已被重置删除」的记录（墓碑时间晚于其作答时间）绝不复活
-  const remote = p.rec || {};
-  let changed = false;
-  for (const qid in remote) {
-    const r = remote[qid];
-    if (recDel[qid] && recDel[qid] > (r && r.t ? r.t : 0)) continue;
-    if (!rec[qid] || recTime(qid) <= (r && r.t ? r.t : 0)) { rec[qid] = r; changed = true; }
-  }
-  // 收藏：谁最后修改听谁的。之前是「取并集」，取消收藏永远同步不上去（拉回来又复活了）
-  if (cloudT > _favLocalT) {
-    const rf = Array.isArray(p.fav) ? p.fav : [];
-    const before = fav.length;
-    fav = Array.from(new Set(rf));
-    if (fav.length !== before) changed = true;
-    _favLocalT = cloudT;
-    if (_ukey) { try { localStorage.setItem("NEU-FAVT:" + _ukey, String(_favLocalT)); } catch (e) {} }
-  }
-  if (changed) saveLocal();
-  // 模拟练习试卷：与云端合并；删除过的试卷带墓碑标记，不会被云端拉回来
-  for (const id in (p.exdel || {})) {
-    exDel[id] = Math.max(exDel[id] || 0, p.exdel[id]);
-  }
-  const isDel = (e) => exDel[e.id] && exDel[e.id] > (e.ts || 0);
-  _cloudExams = (Array.isArray(p.exams) ? p.exams : []).filter((e) => !isDel(e));
-  const beforeEx = exams.length;
-  exams = mergeExams(exams.filter((e) => !isDel(e)), _cloudExams);
-  if (exams.length !== beforeEx) saveLocal();
-  // 本机的收藏比云端新（刚取消/新增还没推送）→ 立刻推上去，别等下次
-  if (_favLocalT > cloudT) { await pushState(); return true; }
-  setSyncLabel("已同步");
+  try {
+    for(const [key,value] of Object.entries({'NEU-REC:':rec,'NEU-FAV:':fav,'NEU-EXAMS:':exams,'NEU-EXDEL:':exDel,'NEU-RECDEL:':recDel,'NEU-FAVT:':_favLocalT})) localStorage.setItem(key+_ukey,JSON.stringify(value));
+  } catch(e) { /* Atomic snapshot above succeeded; compatibility mirrors are optional. */ }
   return true;
 }
-async function pushState() {
-  if (CLOUD_DOWN) { setSyncLabel("离线模式：仅保存在本机"); return; }
-  initCloud();
-  const s = await getSession();
-  if (!s) { setSyncLabel("未登录，未保存"); return; }
-  let correct = 0;
-  for (const qid in rec) {
-    const q = (window.QDATA || {})[qid];
-    if (q && recAns(qid) === q.a) correct++;
+function recAns(id) { const v=rec[id]; return v&&typeof v==='object'?v.a:v; }
+function recTime(id) { return recordTime(rec[id]); }
+function recordTime(v) { return v&&typeof v==='object'?v.t||0:0; }
+function examTime(e) { return e.updatedAt||e.ts||0; }
+function isFav(id) { return fav.includes(id); }
+function touchFav() {
+  const t=Date.now();const current=new Set(fav);
+  // Compare with last persisted state so remove operations survive cross-device merges.
+  const prior=cleanState(_read('NEU-STATE:'+_ukey,{fav:_read('NEU-FAV:'+_ukey,[])}));
+  for(const id of new Set([...prior.fav,...fav])) if(current.has(id)!==prior.fav.includes(id)) favOps[id]={on:current.has(id),t};
+  _favLocalT=t;
+}
+function mergeExams(a,b) {
+  const out=new Map();for(const e of [...(a||[]),...(b||[])]) if(validExam(e)&&(!out.has(e.id)||examTime(e)>examTime(out.get(e.id)))) out.set(e.id,e);
+  return [...out.values()].sort((x,y)=>y.ts-x.ts);
+}
+function mergeState(left,right) {
+  const a=cleanState(left),b=cleanState(right),out=cleanState(a);
+  for(const kind of ['exdel','recdel']) for(const [id,t] of Object.entries(b[kind])) out[kind][id]=Math.max(out[kind][id]||0,t);
+  for(const [id,r] of Object.entries(b.rec)) if(!out.rec[id]||recordTime(r)>recordTime(out.rec[id])) out.rec[id]=r;
+  for(const id of Object.keys(out.rec)) if(out.recdel[id]!==undefined&&out.recdel[id]>=recordTime(out.rec[id])) delete out.rec[id];
+  out.exams=mergeExams(a.exams,b.exams).filter(e=>out.exdel[e.id]===undefined||out.exdel[e.id]<examTime(e));
+  const newest=b.favT>a.favT?b:a;out.fav=newest.fav.slice();out.favT=Math.max(a.favT,b.favT);
+  // Legacy clients use a whole-list clock. New clients track individual add/remove events.
+  for(const [id,op] of Object.entries(b.favOps)) {
+    const cur=out.favOps[id];
+    if(!cur||op.t>cur.t||(op.t===cur.t&&!op.on)) out.favOps[id]=op;
   }
-  const payload = {
-    rec, fav,
-    answered: Object.keys(rec).length,
-    correct, favs: fav.length, ts: Date.now(),
-    exams: mergeExams(exams, (_cloudExams || []).filter((e) => !(exDel[e.id] && exDel[e.id] > (e.ts || 0)))),
-    exdel: exDel,    // 删除标记随卷同步，其他设备也不会把已删的并回来
-    recdel: recDel,  // 重置墓碑：早于重置时间的云端作答不再合并回来
-  };
-  const { error } = await supa
-    .from("user_state")
-    .upsert({ payload, updated_at: new Date().toISOString() }, { onConflict: "owner_id" });
-  setSyncLabel(error ? "保存失败，将重试" : "已同步");
+  const set=new Set(out.fav);
+  for(const [id,op] of Object.entries(out.favOps)) {
+    if(!Object.keys(newest.favOps).length&&newest.favT>op.t) continue;
+    if(op.on)set.add(id);else set.delete(id);
+  }
+  out.fav=[...set];out.seedRestored=a.seedRestored||b.seedRestored;
+  return out;
+}
+function deleteExam(id) { exams=exams.filter(e=>e.id!==id);exDel[id]=Date.now();saveLocal();scheduleSync(); }
+async function cloudAccount() {
+  const s=await getSession();
+  if(s.local) {setSyncLabel('本地已保存 · 云端未连接');return null;}
+  if(userKey(s)!==_ukey) {setSyncLabel('账号已变化，请返回首页继续');return null;}
+  return s;
+}
+async function pullState() {
+  if(!await cloudAccount())return false;
+  const {data,error}=await supa.from('user_state').select('payload,updated_at').eq('owner_id',_ukey).maybeSingle();
+  if(error)throw error;
+  if(data?.payload) {assignState(mergeState(snapshot(),data.payload));saveLocal();}
+  setSyncLabel('已读取云端 · 本地已保存');return true;
+}
+async function syncOnce() {
+  if(!await cloudAccount())return false;
+  const key=_ukey;
+  for(let attempt=0;attempt<4;attempt++) {
+    const {data,error}=await supa.from('user_state').select('payload,updated_at').eq('owner_id',key).maybeSingle();
+    if(error)throw error;if(key!==_ukey)return false;
+    assignState(mergeState(snapshot(),data?.payload||{}));saveLocal();
+    const payload=snapshot(),updated_at=new Date(Math.max(Date.now(),(Date.parse(data?.updated_at)||0)+1)).toISOString();
+    let result;
+    if(data) {
+      let q=supa.from('user_state').update({payload,updated_at}).eq('owner_id',key);
+      q=data.updated_at==null?q.is('updated_at',null):q.eq('updated_at',data.updated_at);
+      result=await q.select('owner_id');
+    } else result=await supa.from('user_state').insert({owner_id:key,payload,updated_at}).select('owner_id');
+    if(result.error?.code==='23505')continue;
+    if(result.error)throw result.error;
+    if(!result.data?.length)continue; // A different device wrote first; re-read and merge.
+    setSyncLabel('已同步');return true;
+  }
+  throw Error('其他设备正在同步，请稍后重试');
+}
+async function pushState() {
+  if(_syncPromise) {_syncAgain=true;return _syncPromise;}
+  _syncPromise=(async()=>{
+    let ok=false;
+    do { _syncAgain=false;ok=await syncOnce(); } while(_syncAgain);
+    return ok;
+  })().catch(e=>{setSyncLabel('本地已保存 · 云同步失败，联网后重试');return false;}).finally(()=>{_syncPromise=null;});
+  return _syncPromise;
 }
 function scheduleSync() {
-  clearTimeout(_syncT);
-  setSyncLabel("待保存…");
-  _syncT = setTimeout(async () => {
-    if (_syncing) { scheduleSync(); return; }   // 上一次还没推完：重新排队，绝不丢任务
-    _syncing = true;
-    try { await pushState(); } catch (e) { setSyncLabel("保存失败"); }
-    _syncing = false;
-  }, 600);
+  clearTimeout(_syncT);setSyncLabel('本地已保存 · 等待同步');
+  _syncT=setTimeout(()=>{_syncT=null;void pushState();},600);
 }
-/* 页面即将关闭/切后台：把还没推出去的变更立刻推走，避免「改完马上刷新」丢操作 */
-function flushSync() {
-  if (!_syncT) return;
-  clearTimeout(_syncT);
-  _syncT = null;
-  if (_syncing) return;
-  _syncing = true;
-  Promise.resolve(pushState()).finally(() => { _syncing = false; });
-}
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") flushSync();
+function flushSync() {saveLocal();if(_syncT){clearTimeout(_syncT);_syncT=null;void pushState();}}
+function syncExams() {scheduleSync();}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushSync();else if(_ukey)scheduleSync();});
+window.addEventListener('pagehide',flushSync);
+window.addEventListener('online',()=>{if(_ukey)scheduleSync();});
+window.addEventListener('storage',e=>{
+  if(e.key==='NEU-STATE:'+_ukey&&e.newValue){try{assignState(mergeState(snapshot(),JSON.parse(e.newValue)));}catch(_){} }
 });
-window.addEventListener("pagehide", flushSync);
-
-/* 试卷同步：读改写 payload（整行覆盖），缺失字段用本机补齐防清空 */
-async function syncExams() {
-  try {
-    initCloud();
-    const { data } = await supa.from("user_state").select("payload").maybeSingle();
-    const p = (data && data.payload) || { rec: rec || {}, fav: fav || [] };
-    if (!p.rec) p.rec = rec || {};
-    if (!p.fav) p.fav = fav || [];
-    const isDel = (e) => exDel[e.id] && exDel[e.id] > (e.ts || 0);
-    p.exams = mergeExams(exams, (_cloudExams || []).filter((e) => !isDel(e)));
-    p.exdel = exDel;
-    p.updated_at = new Date().toISOString();
-    const { error } = await supa
-      .from("user_state")
-      .upsert({ payload: p, updated_at: p.updated_at }, { onConflict: "owner_id" });
-    setSyncLabel(error ? "同步失败" : "已同步");
-  } catch (e) { setSyncLabel("同步失败"); }
-}
-
-/* 手动刷新：先推本地变更，再拉云端合并，最后重画当前页 */
 async function manualRefresh(btn) {
-  if (btn) btn.disabled = true;
-  setSyncLabel("刷新中…");
+  if(btn)btn.disabled=true;
   try {
-    if (window.QDATA && Object.keys(window.QDATA).length) await pushState();
-    await pullState();
-    if (typeof renderChapter === "function") renderChapter();
-    if (typeof renderFav === "function") renderFav();
-    if (typeof renderCourses === "function") renderCourses();
-    // 模拟练习页不能 paintAll（会把刷题历史画进试卷），只排版公式
-    if (typeof state !== "undefined" && state && state.exam) typesetMath(document.body);
-    else paintAll();
-    syncFavBtns();
-    applyFilters();
-    setSyncLabel("已同步");
-    toast("已刷新");
-  } catch (e) {
-    setSyncLabel("刷新失败，请稍后再试");
-  } finally {
-    if (btn) btn.disabled = false;
-  }
+    const ok=await pushState();
+    if(typeof loadFavData==='function')await loadFavData();
+    if(typeof renderChapter==='function')renderChapter();
+    if(typeof renderFav==='function')renderFav();
+    if(typeof renderCourses==='function')renderCourses();
+    if(typeof state==='undefined'||!state?.exam)paintAll();else typesetMath(document.body);
+    syncFavBtns();applyFilters();toast(ok?'已同步并刷新':'已刷新本地记录，云端暂不可用');
+  } finally {if(btn)btn.disabled=false;}
+}
+async function checkUpdate() {
+  try {
+    const ctl=new AbortController(),timer=setTimeout(()=>ctl.abort(),4000);
+    let r;try{r=await fetch('version.json?t='+Date.now(),{cache:'no-store',signal:ctl.signal});}finally{clearTimeout(timer);}
+    if(!r.ok)return false;const v=(await r.json()).v;
+    if(typeof v==='string'&&/^[0-9]{8}[a-z]$/.test(v)&&v>window.MB_VER&&!document.getElementById('update-notice')) {
+      const box=document.createElement('div');box.id='update-notice';box.className='banner info';box.textContent=window.AndroidBackup?'网站有新版本。完成当前练习后，请完全关闭应用并重新打开以更新。':'网站有新版本。完成当前练习后，请关闭此站点的所有标签页，再重新打开以更新。';
+      document.body.appendChild(box);
+    }
+  }catch(e){}return false;
 }
 
 /* ---------- 题目渲染 ----------
    高数/线代是图片题，C语言是纯文本题：用 isImg() 判断，二者共用一套 DOM。 */
-function esc(s) { return String(s == null ? "" : s).replace(/"/g, "&quot;"); }
+function esc(s) { return escHtml(s).replace(/"/g, "&quot;"); }
 function escHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -352,7 +264,7 @@ function escHtml(s) {
 function isImg(u) { return /^(img\/|https?:|\.\/)/.test(String(u || "")); }
 function bodyHtml(u, alt) {
   return isImg(u)
-    ? '<img src="' + u + '" loading="lazy" alt="' + alt + '" onerror="imgFail(this)">'
+    ? '<img src="' + esc(u) + '" loading="lazy" alt="' + alt + '" onerror="imgFail(this)">'
     : '<div class="txt">' + escHtml(u) + "</div>";
 }
 /* 填空判分用的文本归一：去掉空白与中英文标点后比较，避免「对，」「对.」这类误差 */
@@ -368,39 +280,17 @@ function qType(q) {
       : (q.t === "calc" ? "calc" : "single"));
 }
 /* LaTeX 公式排版：页面里有公式才去加载 MathJax（约 1MB，按需） */
-let _mjLoading = false;
+let _mathLoad=null,_mathQueue=Promise.resolve();
 function typesetMath(el) {
-  if (!window.MathJax) {
-    if (_mjLoading) return;
-    _mjLoading = true;
-    window.MathJax = window.MathJax || {
-      tex: { inlineMath: [["\\(", "\\)"]] },
-      startup: { typeset: false },
-    };
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js";
-    s.onload = () => {
-      (window.MathJax.startup.promise || Promise.resolve()).then(() => {
-        _mjLoading = false;
-        typesetMath(el);
-      });
-    };
-    s.onerror = () => {
-      _mjLoading = false;
-      // CDN 偶发不稳，自动重试一次
-      if (!typesetMath._retried) {
-        typesetMath._retried = true;
-        setTimeout(() => typesetMath(el), 1200);
-      }
-    };
-    document.head.appendChild(s);
-    return;
-  }
-  const run = () => {
-    try { MathJax.typesetPromise(el ? [el] : undefined).catch(() => {}); } catch (e) {}
-  };
-  if (window.MathJax.startup && window.MathJax.startup.promise) run();
-  else setTimeout(run, 400);
+  if (!/\\\(|\\\[/.test((el||document.body).textContent||'')) return;
+  if(!_mathLoad) _mathLoad=new Promise((resolve,reject)=>{
+    if(window.MathJax?.typesetPromise){resolve();return;}
+    window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"]]},startup:{typeset:false}};
+    const script=document.createElement('script');script.src='vendor/mathjax/tex-chtml.js';
+    script.onload=()=>Promise.resolve(window.MathJax.startup.promise).then(resolve,reject);
+    script.onerror=()=>{script.remove();delete window.MathJax;reject(Error('公式资源加载失败'));};document.head.appendChild(script);
+  });
+  _mathQueue=_mathQueue.catch(()=>{}).then(()=>_mathLoad).then(()=>MathJax.typesetPromise([el||document.body])).catch(()=>{_mathLoad=null;toast('公式资源暂不可用，联网后可刷新重试');});
 }
 
 function qHTML(q, i, prefix) {
@@ -491,18 +381,21 @@ function showImgHelp() {
   const d = document.createElement("div");
   d.className = "banner err";
   d.id = "imghelp";
-  d.innerHTML = "检测到多张图片加载失败。经服务端抽查，本站图片本身是正常的，"
-    + "这通常是你使用的浏览器开启了<b>「无图模式 / 省流模式」</b>，或被广告拦截功能拦截。"
-    + "请在浏览器设置里关闭无图/省流模式，或改用 Chrome / Edge / Safari 等浏览器打开。"
-    + ' <a href="#" onclick="location.reload();return false">重试</a>';
+  d.innerHTML = '部分图片未能加载，可能是网络中断或资源未缓存。请联网后 <a href="#" onclick="location.reload();return false">重试</a>。';
   wrap.insertBefore(d, wrap.firstChild);
 }
 
 /* ---------- 筛选状态 ---------- */
 const f = { kp: null, wrong: false, kw: "", fav: false };
+function answerCorrect(type,answer,expected) {
+  if(type==='calc')return answer==='ok';
+  if(type==='blank')return normTxt(answer)===normTxt(expected);
+  if(type==='multi')return [...String(answer)].sort().join('')===[...String(expected)].sort().join('');
+  return answer===expected;
+}
 function isWrong(q) {
-  const id = q.getAttribute("data-qid");
-  return !!rec[id] && recAns(id) !== q.getAttribute("data-ans");
+  const id=q.getAttribute('data-qid');
+  return !!rec[id]&&!answerCorrect(q.dataset.type,recAns(id),q.dataset.ans);
 }
 function visibleQs() {
   return Array.prototype.slice.call(document.querySelectorAll(".q"))
@@ -544,7 +437,7 @@ function updateScore() {
   let done = 0, ok = 0;
   qs.forEach((q) => {
     const id = q.getAttribute("data-qid");
-    if (rec[id]) { done++; if (recAns(id) === q.getAttribute("data-ans")) ok++; }
+    if (rec[id]) { done++; if (answerCorrect(q.dataset.type, recAns(id), q.dataset.ans)) ok++; }
   });
   const el = document.getElementById("score");
   if (!el) return;
@@ -562,6 +455,7 @@ function markResult(q, ok, ans) {
   const why = q.querySelector(".why");
   if (why) why.classList.add("show");
 }
+function optionFor(q,value) {return [...q.querySelectorAll('.opt')].find(el=>el.dataset.v===String(value));}
 function paintAnswered(q, v) {
   const ans = q.getAttribute("data-ans") || "";
   const type = q.getAttribute("data-type") || "single";
@@ -578,7 +472,7 @@ function paintAnswered(q, v) {
 
   if (type === "multi") {
     String(v).split("").forEach((c) => {
-      const el = q.querySelector('.opt[data-v="' + c + '"]');
+      const el = optionFor(q,c);
       if (!el) return;
       el.classList.add(ans.indexOf(c) >= 0 ? "right" : "wrong");
       const i = el.querySelector("input");
@@ -587,7 +481,7 @@ function paintAnswered(q, v) {
     // 漏选的正确项用虚线框标出来，让人知道当时少选了哪个
     String(ans).split("").forEach((c) => {
       if (String(v).indexOf(c) < 0) {
-        const el = q.querySelector('.opt[data-v="' + c + '"]');
+        const el = optionFor(q,c);
         if (el) el.classList.add("right", "missed");
       }
     });
@@ -615,10 +509,10 @@ function paintAnswered(q, v) {
     return;
   }
 
-  const chosen = q.querySelector('.opt[data-v="' + v + '"]');
+  const chosen = optionFor(q,v);
   if (chosen) chosen.classList.add(v === ans ? "right" : "wrong");
   if (v !== ans) {
-    const right = q.querySelector('.opt[data-v="' + ans + '"]');
+    const right = optionFor(q,ans);
     if (right) right.classList.add("right");
   }
   q.querySelectorAll("input").forEach((i) => { i.disabled = true; });
@@ -629,6 +523,7 @@ function paintAnswered(q, v) {
 function submitMulti(btn) {
   const q = btn.closest(".q");
   if (!q) return;
+  if (typeof state !== "undefined" && state.exam) { toast("模拟卷将在交卷时统一判分"); return; }
   const picked = [];
   q.querySelectorAll('input[type=checkbox]').forEach((b) => { if (b.checked) picked.push(b.value); });
   if (!picked.length) { toast("至少选一个选项"); return; }
@@ -643,6 +538,7 @@ function submitMulti(btn) {
 function checkBlank(btn) {
   const q = btn.closest(".q");
   if (!q) return;
+  if (typeof state !== "undefined" && state.exam) { toast("模拟卷将在交卷时统一判分"); return; }
   const inp = q.querySelector(".blank-in");
   const val = inp ? inp.value.trim() : "";
   if (!val) { toast("先写个答案再核对"); return; }
@@ -695,6 +591,7 @@ function syncFavBtns() {
     b.classList.toggle("on", on);
     b.textContent = on ? "★" : "☆";
     b.title = on ? "取消收藏" : "收藏本题";
+    b.setAttribute("aria-label",b.title); b.setAttribute("aria-pressed",String(on));
   });
 }
 function peek(btn) {
@@ -723,11 +620,11 @@ function toggleCram(btn) {
       // 多选答案是 "ABD" 这样的串，要逐项标绿
       if (q.getAttribute("data-type") === "multi") {
         String(ans).split("").forEach((c) => {
-          const el = q.querySelector('.opt[data-v="' + c + '"]');
+          const el = optionFor(q,c);
           if (el) el.classList.add("right");
         });
       } else {
-        const right = q.querySelector('.opt[data-v="' + ans + '"]');
+        const right = optionFor(q,ans);
         if (right) right.classList.add("right");
       }
       const fb = q.querySelector(".fb");
@@ -735,11 +632,11 @@ function toggleCram(btn) {
       fb.textContent = q.getAttribute("data-type") === "calc"
         ? "解答题 · 答案解析在下方" : "答案 " + ans;
       q.querySelector(".why").classList.add("show");
-      q.querySelectorAll("input").forEach((i) => { i.disabled = true; });
+      q.querySelectorAll("input,.blank-box button,.multi-submit button,.self-eval button").forEach((i) => { i.disabled = true; });
       q.querySelectorAll(".opt").forEach((o) => o.classList.add("locked"));
     } else {
       q.querySelectorAll(".opt").forEach((o) => o.classList.remove("right", "wrong", "locked"));
-      q.querySelectorAll("input").forEach((i) => { i.disabled = false; });
+      q.querySelectorAll("input,.blank-box button,.multi-submit button,.self-eval button").forEach((i) => { i.disabled = false; });
       const fb = q.querySelector(".fb");
       fb.className = "fb"; fb.innerHTML = "";
       q.querySelector(".why").classList.remove("show");
@@ -876,40 +773,23 @@ function bindCommonControls() {
     if (e.key === "Enter" || e.keyCode === 13) jumpToNo();
   });
 }
-async function bootPage(renderFn, beforeRender) {
-  // 0. 先确认身份并切换到该账号自己的缓存——必须在渲染前做，
-  //    否则渲染的就是上一个账号的数据
-  const s = await requireLogin();
-  if (!s) return;
-  migrateOldLocalData(userKey(s));
-  loadForUser(s);
-  // 页面自己的数据准备（如收藏夹按需加载切片），在渲染前做
-  if (beforeRender) { try { await beforeRender(); } catch (e) {} }
-  // 1. 渲染本地缓存（快）
-  renderFn();
-  paintAll();
-  syncFavBtns();
-  setNavBtn();
-  applyFilters();
-  // 2. 云端合并后重渲染
+async function bootPage(renderFn,beforeRender) {
+  loadForUser(localSession());
+  if(beforeRender) await beforeRender();
+  const draw=()=>{renderFn();paintAll();syncFavBtns();setNavBtn();applyFilters();};
+  draw();jumpToLatest(true);
   try {
-    await pullState();
-  } catch (e) {
-    setSyncLabel("云端读取异常，使用本机进度");
-  }
-  renderFn();
-  paintAll();
-  syncFavBtns();
-  applyFilters();
-  jumpToLatest();
+    const ok=await pushState();
+    if(ok){if(beforeRender)await beforeRender();
+      const editing=document.querySelector('input:checked:not(:disabled)')||[...document.querySelectorAll('input[type=text]:not(:disabled)')].some(i=>i.value);
+      if(!editing)draw();
+    }
+  }catch(e){setSyncLabel('本地已保存 · 云端暂不可用');}
 }
 async function doSignOut() {
-  sessionStorage.setItem("mb_skipauto", "1");  // 主动退出：本次打开不再自动登录
-  initCloud();
-  try { await pushState(); } catch (e) {}
-  await supa.auth.signOut();
-  location.href = "index.html";
+  if(!confirm('退出后需要重新登录，当前设备的学习记录会保留。继续吗？'))return;
+  await pushState();
+  try {await initCloud().auth.signOut({scope:'local'});}catch(e){toast('退出失败，请联网后重试');return;}
+  localStorage.removeItem('mb_last_user');location.href='index.html';
 }
-
-// 启动即检查版本（不依赖 DOM），发现新版本会清缓存并刷新
-checkUpdate();
+void checkUpdate();

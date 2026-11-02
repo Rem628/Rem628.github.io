@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>我的收藏夹</title>
-<link rel="stylesheet" href="app.css?v=20261031a">
+<link rel="stylesheet" href="app.css?v=20261102b">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="theme-color" content="#1B3B6F">
@@ -16,7 +16,7 @@
 <script>
 if ('serviceWorker' in navigator) {
   addEventListener('load', function () {
-    navigator.serviceWorker.register('sw.js');
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
 </script>
@@ -69,17 +69,17 @@ if ('serviceWorker' in navigator) {
 <div class="toast" id="toast"></div>
 <pre id="diag" style="font-size:10.5px;line-height:1.5;color:#86909c;background:#f7f8fa;border-radius:8px;padding:8px 10px;margin:10px auto;max-width:1100px;white-space:pre-wrap;word-break:break-all;display:none"></pre>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<script src="qmap.js?v=20261031a"></script>
-<script src="meta.js?v=20261031a"></script>
-<script src="app.js?v=20261031a"></script>
+<script src="vendor/supabase.js"></script>
+<script src="qmap.js?v=20261102b"></script>
+<script src="meta.js?v=20261102b"></script>
+<script src="app.js?v=20261102b"></script>
 <script>
 /* ---------- 内建诊断：加载链路每一步都记录，出问题时面板可见 ---------- */
 const DIAG = [];
 function diag(m) {
   DIAG.push(new Date().toLocaleTimeString("zh-CN", { hour12: false }) + "  " + m);
   const d = document.getElementById("diag");
-  if (d) { d.style.display = "block"; d.textContent = "收藏夹加载诊断（排查用，可忽略）：\n" + DIAG.join("\n"); }
+  if (d && new URLSearchParams(location.search).has("debug")) { d.style.display = "block"; d.textContent = "收藏夹加载诊断（排查用，可忽略）：\n" + DIAG.join("\n"); }
 }
 window.addEventListener("error", (e) => diag("JS错误: " + e.message + " @" + String(e.filename || "").split("/").pop() + ":" + e.lineno));
 window.addEventListener("unhandledrejection", (e) => diag("Promise拒绝: " + ((e.reason && e.reason.message) || e.reason)));
@@ -127,7 +127,8 @@ function renderFav() {
       html += '</div>';
     });
   });
-  box.innerHTML = html;
+  const missing=fav.filter(id=>!Q[id]);
+  box.innerHTML=(missing.length?'<div class="banner warn">有 '+missing.length+' 条收藏暂未能加载或匹配。编号已保留，可联网后点同步刷新重试。<details><summary>查看编号</summary>'+missing.map(escHtml).join('<br>')+'</details></div>':'')+html;
 
   // 头部信息（格式与章节页一致）
   const kpCount = chOrder.reduce((s, c) => s + c.kps.length, 0);
@@ -164,6 +165,7 @@ function renderFav() {
   });
   document.getElementById("kpbtns").innerHTML = btns;
 
+  syncFavBtns();
   paintAll();          // 回显作答 + 公式排版
   applyFilters();      // 题组筛选 / 组统计 / 正确率 / empty 状态（与章节页同一套）
   diag("渲染完成：显示 " + n + " 题（fav 总 " + fav.length + " 条）");
