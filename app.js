@@ -1,4 +1,4 @@
-window.MB_VER = "20261102b";
+window.MB_VER = "20261103a";
 
 /* ---------- 全局错误显示（诊断用）：任何脚本错误都显示在页面顶部 ---------- */
 function showFatal(m) {
@@ -47,7 +47,9 @@ function toast(msg) {
 }
 function setSyncLabel(text) {
   const el=document.getElementById('syncstate');
-  if(el) el.textContent=_storageFailed ? '本机保存失败，请立即导出备份' : text;
+  const label=_storageFailed ? '本机保存失败，请立即导出备份' : text;
+  if(el) el.textContent=label;
+  window.dispatchEvent(new CustomEvent('mathbank-sync',{detail:label}));
 }
 function _read(k,d) { try { const v=JSON.parse(localStorage.getItem(k)); return v==null?d:v; } catch(e) { return d; } }
 function userKey(s) { const u=s?.user||{}; return String(u.id||u.sub||u.email||u.phone||'anon').replace(/[^A-Za-z0-9_-]/g,'_').slice(0,64); }
@@ -286,7 +288,7 @@ function typesetMath(el) {
   if(!_mathLoad) _mathLoad=new Promise((resolve,reject)=>{
     if(window.MathJax?.typesetPromise){resolve();return;}
     window.MathJax={tex:{inlineMath:[["\\(","\\)"]],displayMath:[["\\[","\\]"]]},startup:{typeset:false}};
-    const script=document.createElement('script');script.src='vendor/mathjax/tex-chtml.js';
+    const script=document.createElement('script');script.src='vendor/mathjax/tex-svg-full.js';
     script.onload=()=>Promise.resolve(window.MathJax.startup.promise).then(resolve,reject);
     script.onerror=()=>{script.remove();delete window.MathJax;reject(Error('公式资源加载失败'));};document.head.appendChild(script);
   });

@@ -1,0 +1,39 @@
+{
+  "verifiedAt": "2026-11-02",
+  "source": "http://mathe.neu.edu.cn/main/practice",
+  "minChoiceKnowledgePoints": 2,
+  "choicePoints": 4,
+  "blankPoints": 4,
+  "calculationPoints": 12,
+  "GS": {
+    "choice": 25,
+    "blank": 0,
+    "calculation": 0,
+    "total": 25,
+    "score": 100
+  },
+  "XD": {
+    "choiceOnly": {
+      "choice": 25,
+      "blank": 0,
+      "calculation": 0,
+      "total": 25,
+      "score": 100
+    },
+    "withBlank": {
+      "choice": 22,
+      "blank": 3,
+      "calculation": 0,
+      "total": 25,
+      "score": 100
+    },
+    "withBlankAndCalculation": {
+      "choice": 19,
+      "blank": 3,
+      "calculation": 1,
+      "total": 23,
+      "score": 100
+    }
+  },
+  "notes": "Verified by the official server-generated studentTemplate configuration and practice paper section labels; no answers or scores submitted."
+}
