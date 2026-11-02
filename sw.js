@@ -5,7 +5,7 @@
  *    —— 服务器偶发抽风时直接用缓存，不再卡住；改版靠 CACHE 版本号强制刷新
  *  - 跨域请求（云端 API、CDN）：直接放行，绝不拦截
  */
-const CACHE = 'mathbank-v36';
+const CACHE = 'mathbank-v37';
 const SHELL = ['./', './app.css', './meta.js', './fav.html', './ch.html', './qmap.js', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (e) => {
