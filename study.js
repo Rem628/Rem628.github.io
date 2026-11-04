@@ -199,7 +199,7 @@ document.addEventListener('click',async e=>{const b=e.target.closest('[data-act]
  }catch(err){notify(err.message||'操作未完成，请重试')}finally{if(a==='sync-now'&&b.isConnected)b.disabled=false}},true);
 document.addEventListener('input',e=>{if(e.target.id==='home-search'&&!searchReady){searchReady=true;Promise.all(Object.keys(CHAPTERS).filter(k=>/^(CY|GL)_/.test(k)).map(ensureChapter)).then(()=>{if($('#course-results'))$('#course-results').innerHTML=courseResults(searchTerm)}).catch(()=>{searchReady=false;notify('部分文字题未加载，仍可搜索章节与知识点')})}});
 let accountRole={uid:'',admin:false,allowed:true},adminPageNumber=1,adminQuery='',adminTab='users',adminRows=[],accountBusy=false;
-const ACCOUNT_RETURN='https://rem628.github.io/?account=';
+const ACCOUNT_RETURN='https://veryblue628.github.io/Rem628.github.io/?account=';
 function accountError(e){const m=String(e?.message||'');if(/invalid login/i.test(m))return'邮箱或密码不正确';if(/email not confirmed/i.test(m))return'请先验证邮箱，可使用“重发验证邮件”';if(/rate|too many|seconds/i.test(m))return'操作较频繁，请稍后再试';if(/not allowed|smtp|sending.*email/i.test(m))return'邮件暂时无法发送，请联系管理员检查邮件服务';if(/fetch|network|timeout/i.test(m))return'网络连接失败，请稍后重试';return m||'操作未完成，请稍后重试'}
 function authForm(mode='login',email=''){
  const change=mode==='password',login=mode==='login',signup=mode==='signup',recovery=mode==='recovery',password=login||signup||change||recovery;

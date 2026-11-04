@@ -1,4 +1,4 @@
-const CACHE='mathbank-20261104a',IMAGES='mathbank-images-v1';
+const CACHE='mathbank-20261104b',IMAGES='mathbank-images-v1';
 const SHELL=['./','index.html','app.js','study.js','study.css','meta.js','question-index.js','qmap.js','fav_seed.js','data-tools.js','ch.html','fav.html','exam.html','review.html','manifest.json','official-rules.json','offline-manifest.json','vendor/supabase.js','vendor/mathjax/tex-svg-full.js','icons/icon-192.png'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL))));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{const images=await caches.open(IMAGES);for(const name of await caches.keys()){if(!name.startsWith('mathbank-')||name===CACHE||name===IMAGES)continue;const old=await caches.open(name);for(const req of await old.keys()){const url=new URL(req.url);if(url.pathname.includes('/img/')){const hit=await old.match(req);if(hit)await images.put(url.origin+url.pathname,hit)}}await caches.delete(name)}await self.clients.claim()})()));
