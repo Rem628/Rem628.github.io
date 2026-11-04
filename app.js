@@ -1,4 +1,4 @@
-window.MB_VER = "20261104b";
+window.MB_VER = "20261104c";
 
 /* ---------- 全局错误显示（诊断用）：任何脚本错误都显示在页面顶部 ---------- */
 function showFatal(m) {
@@ -35,6 +35,7 @@ let supa = null;
 const LOCAL_UID = '2109519881526317056';
 let CLOUD_DOWN = false;
 let rec = {}, fav = [], exams = [], exDel = {}, recDel = {}, favOps = {};
+let learningData=LearningCore.clean();
 let _seedRestored=false;
 let _ukey = '', _favLocalT = 0, _cloudExams = [], _syncT = null;
 let _syncPromise = null, _syncAgain = false, _storageFailed = false;
@@ -111,19 +112,21 @@ function cleanState(p={}) {
     exdel:mapValues(p.exdel,stamp),recdel:mapValues(p.recdel,stamp),
     favOps:mapValues(p.favOps,v=>validObject(v)&&typeof v.on==='boolean'&&stamp(v.t)),
     favT:stamp(p.favT)?p.favT:(stamp(p.ts)?p.ts:0),ts:stamp(p.ts)?p.ts:0,
+    schema:4,...LearningCore.clean(p),
     seedRestored:p.seedRestored===true
   };
 }
-function snapshot() { return {rec,fav,exams,exdel:exDel,recdel:recDel,favOps,favT:_favLocalT,seedRestored:_seedRestored||_read('mb_seed:'+_ukey,false),ts:Date.now(),schema:2}; }
+function snapshot() { return {rec,fav,exams,exdel:exDel,recdel:recDel,favOps,favT:_favLocalT,seedRestored:_seedRestored||_read('mb_seed:'+_ukey,false),ts:Date.now(),schema:4,...learningData}; }
 function assignState(p) {
-  _seedRestored=p.seedRestored===true;rec=p.rec;fav=p.fav;exams=p.exams;exDel=p.exdel;recDel=p.recdel;favOps=p.favOps;_favLocalT=p.favT;
+  learningData=LearningCore.clean(p);_seedRestored=p.seedRestored===true;rec=p.rec;fav=p.fav;exams=p.exams;exDel=p.exdel;recDel=p.recdel;favOps=p.favOps;_favLocalT=p.favT;
 }
 function loadForUser(s) {
   const k=userKey(s); if(k===_ukey) return;
   _ukey=k;_cloudExams=[];
   let p=_read('NEU-STATE:'+k,null);
   if(!p) p={rec:_read('NEU-REC:'+k,{}),fav:_read('NEU-FAV:'+k,[]),exams:_read('NEU-EXAMS:'+k,[]),exdel:_read('NEU-EXDEL:'+k,{}),recdel:_read('NEU-RECDEL:'+k,{}),favT:_read('NEU-FAVT:'+k,0)};
-  assignState(cleanState(p));
+  p=cleanState(p);const oldDraft=_read('NEU-DRAFT:'+k,null);if(oldDraft&&validExam(oldDraft)&&!p.drafts[oldDraft.id])p.drafts[oldDraft.id]=oldDraft;
+  assignState(p);
 }
 function migrateOldLocalData() { /* Legacy account migration is explicit through the import controls. */ }
 function saveLocal() {
@@ -162,7 +165,7 @@ function mergeState(left,right) {
   for(const [id,r] of Object.entries(b.rec)) if(!out.rec[id]||recordTime(r)>recordTime(out.rec[id])) out.rec[id]=r;
   for(const id of Object.keys(out.rec)) if(out.recdel[id]!==undefined&&out.recdel[id]>=recordTime(out.rec[id])) delete out.rec[id];
   out.exams=mergeExams(a.exams,b.exams).filter(e=>out.exdel[e.id]===undefined||out.exdel[e.id]<examTime(e));
-  const newest=b.favT>a.favT?b:a;out.fav=newest.fav.slice();out.favT=Math.max(a.favT,b.favT);
+  const newest=b.favT>a.favT?b:a;out.fav=a.favT===0&&b.favT===0?[...new Set([...a.fav,...b.fav])]:newest.fav.slice();out.favT=Math.max(a.favT,b.favT);
   // Legacy clients use a whole-list clock. New clients track individual add/remove events.
   for(const [id,op] of Object.entries(b.favOps)) {
     const cur=out.favOps[id];
@@ -173,7 +176,7 @@ function mergeState(left,right) {
     if(!Object.keys(newest.favOps).length&&newest.favT>op.t) continue;
     if(op.on)set.add(id);else set.delete(id);
   }
-  out.fav=[...set];out.seedRestored=a.seedRestored||b.seedRestored;
+  out.fav=[...set];out.seedRestored=a.seedRestored||b.seedRestored;Object.assign(out,LearningCore.merge(a,b));
   return out;
 }
 function deleteExam(id) { exams=exams.filter(e=>e.id!==id);exDel[id]=Date.now();saveLocal();scheduleSync(); }
@@ -271,11 +274,9 @@ function bodyHtml(u, alt) {
 }
 /* 填空判分用的文本归一：去掉空白与中英文标点后比较，避免「对，」「对.」这类误差 */
 function normTxt(s) {
-  return String(s == null ? "" : s)
-    .replace(/[\s\u3000]/g, "")
-    .replace(/[，,。.、;；:：""''（）()《》<>！!？?—\-_]/g, "")
-    .toLowerCase();
+  return String(s??'').normalize('NFKC').replace(/[\s\u3000]/g,'').replace(/[。；;，,]+$/g,'').toLowerCase();
 }
+
 function qType(q) {
   return q.t === "multi" ? "multi"
     : (q.t === "blank" ? "blank"

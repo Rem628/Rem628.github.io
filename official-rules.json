@@ -35,5 +35,27 @@
       "score": 100
     }
   },
-  "notes": "Verified by the official server-generated studentTemplate configuration and practice paper section labels; no answers or scores submitted."
+  "notes": "Verified by the official server-generated studentTemplate configuration and practice paper section labels; no answers or scores submitted.",
+  "schema": 2,
+  "subjectiveKnowledgePoints": {
+    "XD": {
+      "blank": [
+        "5664642f5664642f5664642f5664642f",
+        "a763c800a763c800a763c800a763c800",
+        "a91f031aa91f031aa91f031aa91f031a",
+        "b5daf057b5daf057b5daf057b5daf057",
+        "1d0e3c6c1d0e3c6c1d0e3c6c1d0e3c6c",
+        "2e18b3da2e18b3da2e18b3da2e18b3da",
+        "55a1305e55a1305e55a1305e55a1305e"
+      ],
+      "calculation": [
+        "a763c800a763c800a763c800a763c800",
+        "a91f031aa91f031aa91f031aa91f031a",
+        "b5daf057b5daf057b5daf057b5daf057",
+        "1d0e3c6c1d0e3c6c1d0e3c6c1d0e3c6c",
+        "2e18b3da2e18b3da2e18b3da2e18b3da",
+        "55a1305e55a1305e55a1305e55a1305e"
+      ]
+    }
+  }
 }

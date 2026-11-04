@@ -5,15 +5,21 @@ function downloadJSON(name,data) {
   const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
   const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
-function exportBackup() {
+function accountSnapshot(uid) {
+  if(uid===_ukey)return cleanState(snapshot());
+  const p=cleanState(_read('NEU-STATE:'+uid,null)||legacyState(uid));
+  const draft=_read('NEU-DRAFT:'+uid,null);if(draft&&validExam(draft)&&!p.drafts[draft.id])p.drafts[draft.id]=draft;
+  return p;
+}
+function exportBackup({allAccounts=false}={}) {
   const accounts={};
-  for(let i=0;i<localStorage.length;i++){
-    const key=localStorage.key(i),m=key.match(/^NEU-(?:STATE|REC|FAV|EXAMS|EXDEL|RECDEL|FAVT):([A-Za-z0-9_-]+)$/);
+  if(allAccounts)for(let i=0;i<localStorage.length;i++){
+    const key=localStorage.key(i),m=key.match(/^NEU-(?:STATE|REC|FAV|EXAMS|EXDEL|RECDEL|FAVT|DRAFT):([A-Za-z0-9_-]+)$/);
     if(!m||accounts[m[1]])continue;const uid=m[1];
-    accounts[uid]=cleanState(_read('NEU-STATE:'+uid,null)||legacyState(uid));
+    accounts[uid]=accountSnapshot(uid);
   }
-  if(_ukey)accounts[_ukey]=snapshot();
-  downloadJSON('数学题库备份-'+new Date().toISOString().slice(0,10)+'.json',{format:'mathbank-backup',version:2,exportedAt:new Date().toISOString(),accounts});
+  if(_ukey)accounts[_ukey]=accountSnapshot(_ukey);
+  downloadJSON('大学题库备份-'+new Date().toISOString().slice(0,10)+'.json',{format:'mathbank-backup',version:3,scope:allAccounts?'all-local-accounts':'current-account',exportedAt:new Date().toISOString(),accounts});
   toast('已生成备份，请妥善保存文件');
 }
 function legacyState(uid){return {rec:_read('NEU-REC:'+uid,{}),fav:_read('NEU-FAV:'+uid,[]),exams:_read('NEU-EXAMS:'+uid,[]),exdel:_read('NEU-EXDEL:'+uid,{}),recdel:_read('NEU-RECDEL:'+uid,{}),favT:_read('NEU-FAVT:'+uid,0)};}
@@ -26,21 +32,23 @@ function validateImport(p) {
     if(!['GS','XD','CY','GL'].includes(e.tk)||!stamp(e.score)||!stamp(e.total)||!stamp(e.right||0)||!stamp(e.pending||0))throw Error('试卷分数或科目无效');
     if(e.updatedAt!==undefined&&!stamp(e.updatedAt))throw Error('试卷更新时间无效');
   }
+  for(const key of ['events','drafts','prefs','feedback'])if(p[key]!==undefined&&(!validObject(p[key])||Object.keys(c[key]).length!==Object.keys(p[key]).length))throw Error(key+' 字段无效，未导入');
+  if(p.schema!==undefined&&(!Number.isInteger(p.schema)||p.schema>4))throw Error('学习数据版本较新，请先升级应用');
   if(p.favT!==undefined&&!stamp(p.favT))throw Error('收藏时间无效');return c;
 }
 function parseBackup(data) {
   if(!validObject(data))throw Error('文件必须是题库 JSON 备份');const accounts={};
   if(data.format==='mathbank-backup') {
-    if(data.version!==2||!validObject(data.accounts))throw Error('不支持的备份版本');
+    if(![2,3].includes(data.version)||!validObject(data.accounts))throw Error('不支持的备份版本');
     for(const [id,p]of Object.entries(data.accounts)){if(!safeId(id))throw Error('账号编号无效');accounts[id]=validateImport(p);}
   } else {
-    const groups={},fields={REC:'rec',FAV:'fav',EXAMS:'exams',EXDEL:'exdel',RECDEL:'recdel',FAVT:'favT',STATE:'state'};
+    const groups={},fields={REC:'rec',FAV:'fav',EXAMS:'exams',EXDEL:'exdel',RECDEL:'recdel',FAVT:'favT',STATE:'state',DRAFT:'draft'};
     for(const [key,value]of Object.entries(data)){
-      const m=key.match(/^NEU-(STATE|REC|FAV|EXAMS|EXDEL|RECDEL|FAVT):([A-Za-z0-9_-]+)$/);if(!m)continue;
+      const m=key.match(/^NEU-(STATE|REC|FAV|EXAMS|EXDEL|RECDEL|FAVT|DRAFT):([A-Za-z0-9_-]+)$/);if(!m)continue;
       if(!safeId(m[2]))throw Error('账号编号无效');
       (groups[m[2]]??={})[fields[m[1]]]=typeof value==='string'?JSON.parse(value):value;
     }
-    for(const [id,p]of Object.entries(groups))accounts[id]=validateImport(p.state||p);
+    for(const [id,p]of Object.entries(groups)){const merged=validateImport(p.state||p);if(p.draft){if(!LearningCore.validDraft(p.draft))throw Error('旧版草稿无效');merged.drafts[p.draft.id]=p.draft}accounts[id]=merged;}
   }
   if(!Object.keys(accounts).length)throw Error('未发现可导入的学习记录');return accounts;
 }
@@ -58,10 +66,11 @@ async function importOldData(file) {
   }catch(e){_pendingImport=null;document.getElementById('import-confirm').hidden=true;msg.textContent='未导入：'+e.message;}
 }
 function applyImportedState(incoming) {
-  const before=snapshot(),merged=mergeState(before,validateImport(incoming));
+  const before=JSON.parse(JSON.stringify(snapshot())),merged=mergeState(before,validateImport(incoming));
   localStorage.setItem('mb_before_import:'+_ukey,JSON.stringify(before));
   localStorage.setItem('NEU-STATE:'+_ukey,JSON.stringify(merged));
-  assignState(merged);saveLocal();scheduleSync();
+  try {assignState(merged);if(!saveLocal())throw Error('本地存储不可用');scheduleSync();}
+  catch(error){assignState(cleanState(before));try{localStorage.setItem('NEU-STATE:'+_ukey,JSON.stringify(before));}catch{}throw error;}
 }
 function confirmImport() {
   const p=_pendingImport?.[document.getElementById('import-account').value];if(!p)return;
