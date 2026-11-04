@@ -1,0 +1,10 @@
+async page=>{
+ if(!['127.0.0.1','localhost'].includes(new URL(page.url()).hostname))throw Error('These fixtures are restricted to a local disposable test site');
+ const base='http://127.0.0.1:4173/Rem628.github.io/',out='work/browser-screenshots/';const layouts=[];
+ await page.setViewportSize({width:1440,height:1000});await page.goto(base+'#me');await page.getByLabel('主题设置').selectOption('light');await page.goto(base+'#home');await page.getByRole('heading',{name:'今天，从这里继续'}).waitFor();await page.screenshot({path:out+'桌面首页.png',fullPage:true});
+ for(const width of [375,390,768,1440]){await page.setViewportSize({width,height:844});for(const route of ['home','course/GS','smart-review','analytics','search','me','practice/CY_0','practice/GS_0','exam']){await page.goto(base+'#'+route);await page.waitForFunction(()=>!document.querySelector('.loading-panel'));await page.waitForTimeout(80);const overflow=await page.evaluate(()=>({scroll:document.documentElement.scrollWidth,client:document.documentElement.clientWidth}));layouts.push({width,route,...overflow});if(!overflow.client||overflow.scroll>overflow.client+1)throw Error('Horizontal overflow '+JSON.stringify(layouts.at(-1)))}}
+ await page.setViewportSize({width:390,height:844});await page.goto(base+'#home');await page.screenshot({path:out+'手机首页.png',fullPage:true});await page.goto(base+'#me');await page.getByLabel('主题设置').selectOption('sepia');await page.goto(base+'#practice/CY_0');await page.screenshot({path:out+'护眼答题页.png',fullPage:true});
+ await page.goto(base+'#me');await page.getByLabel('主题设置').selectOption('dark');await page.goto(base+'#analytics');await page.screenshot({path:out+'深色学习分析.png',fullPage:true});await page.emulateMedia({reducedMotion:'reduce'});
+ await page.goto(base+'#practice/GS_0');await page.locator('.image-btn').first().click();await page.getByRole('heading',{name:'题图原件'}).waitFor();await page.getByRole('button',{name:'放大题图',exact:true}).click();await page.keyboard.press('Escape');if(await page.locator('#dialog[open]').count())throw Error('Escape failed to close modal');
+ return {responsiveRoutes:layouts.length,layouts,themeScreenshots:4,keyboardDialog:true};
+}

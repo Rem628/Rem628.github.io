@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" android:compileSdkVersion="34" android:compileSdkVersionCodename="14" package="io.github.rem628.mathbank" platformBuildVersionCode="34" platformBuildVersionName="14">
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <application android:allowBackup="false" android:usesCleartextTraffic="false" android:hardwareAccelerated="true" android:icon="@drawable/ic_launcher" android:label="数学题库·新版" android:roundIcon="@drawable/ic_launcher" android:supportsRtl="false" android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <activity android:configChanges="keyboardHidden|orientation|screenSize|smallestScreenSize" android:exported="true" android:label="数学题库·新版" android:launchMode="singleTop" android:name=".MainActivity" android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

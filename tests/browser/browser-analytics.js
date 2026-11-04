@@ -1,0 +1,5 @@
+async page=>{
+ if(!['127.0.0.1','localhost'].includes(new URL(page.url()).hostname))throw Error('These fixtures are restricted to a local disposable test site');
+ const ctx=await page.context().browser().newContext(),p=await ctx.newPage();await p.addInitScript(()=>{const ids=['34e8c22b40dd46859aed5737b43bf187','37cbdf30a45a4f2e9e9762c3b61537ac'];localStorage.setItem('NEU-STATE:2109519881526317056',JSON.stringify({schema:4,rec:{[ids[0]]:{a:'A',t:1}},events:{a:{kind:'answer',qid:ids[0],correct:false,t:2,source:'exam'},b:{kind:'answer',qid:ids[1],correct:true,t:3,source:'exam'}}}))});
+ await p.goto('http://127.0.0.1:4173/Rem628.github.io/#analytics');await p.getByRole('heading',{name:'学习分析',exact:true}).waitFor();const course=await p.locator('.analysis-courses .panel').first().innerText(),metrics=await p.locator('.metric-grid').innerText();if(!course.includes('已练 2 / 4107')||!course.includes('错题 1')||!metrics.includes('累计作答\n3'))throw Error('Exam completion/accuracy UI mismatch: '+course+' '+metrics);await ctx.close();return {course,metrics,examAttemptsIncluded:true};
+}
