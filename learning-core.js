@@ -28,11 +28,11 @@
    r.last=e.t;r.due=e.t+r.interval;r.history.push(e);out[e.qid]=r;
   }return out;
  }
- function metrics(events,byId){const days={},courses={},kps={},questions=new Set();let correct=0,count=0;
+ function metrics(events,byId){const days={},courses={},kps={},latest={},questions=new Set();let correct=0,count=0;
   for(const e of events){const key=day(e.t),d=e.t>0?(days[key]??={answers:0,correct:0,reviews:0,seconds:0}):null;if(e.kind==='time'){if(d)d.seconds+=e.seconds;continue}if(e.kind!=='answer'||!byId.has(e.qid))continue;
    const q=byId.get(e.qid),c=courses[q.tk]??={count:0,correct:0,ids:new Set()},k=kps[q.kpid]??={id:q.kpid,tk:q.tk,key:q._key,name:q.kp,count:0,correct:0,last:0,wrongStreak:0};
-   count++;correct+=+e.correct;if(d){d.answers++;d.correct+=+e.correct;d.reviews+=e.review?1:0}c.count++;c.correct+=+e.correct;c.ids.add(e.qid);k.count++;k.correct+=+e.correct;k.last=e.t;k.wrongStreak=e.correct?0:k.wrongStreak+1;questions.add(e.qid);
-  }return {count,correct,days,courses,kps,questions};
+   count++;correct+=+e.correct;if(d){d.answers++;d.correct+=+e.correct;d.reviews+=e.review?1:0}c.count++;c.correct+=+e.correct;c.ids.add(e.qid);k.count++;k.correct+=+e.correct;k.last=e.t;k.wrongStreak=e.correct?0:k.wrongStreak+1;questions.add(e.qid);latest[e.qid]={tk:q.tk,correct:e.correct,t:e.t};
+  }return {count,correct,days,courses,kps,questions,latest};
  }
  function timer(d,now=Date.now()){const start=d.start??d.ts,deadline=d.deadline||start+(d.minutes||0)*60000;return {elapsed:Math.max(0,now-start),deadline,remaining:d.minutes?Math.max(0,deadline-now):null,timedOut:!!(d.timedOut||(d.minutes&&now>=deadline))}}
  function recommend(list,n,lastSeen={},now=Date.now(),random=Math.random){const fresh=list.filter(q=>now-(lastSeen[q.q]||0)>DAY),recent=list.filter(q=>!fresh.includes(q));function draw(pool){const bins=new Map();for(const q of pool){const key=(q.t||'single')+':'+(q.tag||'');if(!bins.has(key))bins.set(key,[]);bins.get(key).push(q)}for(const bin of bins.values())for(let i=bin.length-1;i>0;i--){let j=Math.floor(random()*(i+1));[bin[i],bin[j]]=[bin[j],bin[i]]}const out=[];while([...bins.values()].some(x=>x.length))for(const bin of bins.values())if(bin.length)out.push(bin.pop());return out}return [...draw(fresh),...draw(recent)].slice(0,Math.min(n,list.length))}
