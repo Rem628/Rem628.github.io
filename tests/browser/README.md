@@ -14,3 +14,5 @@ npx --package @playwright/cli playwright-cli run-code $browserScenario
 依次运行 phase1（生成备份文件）、phase2（含浏览器时钟快进）、review-backup、offline、visual。offline 会注入一次预期 HTTP 503，验证失败资源不被算作成功，然后修复并断网刷新；该 HTTP 错误属于测试注入。final 创建独立的 Android 触控模拟上下文，检查多草稿、横屏、大字和真实无效账号登录错误。
 
 这些场景不能替代 Chrome 正式版、Android 真机、真实账号成功登录或两个真实设备云同步的最终验收。源码 ZIP 无 .git 时，core.cjs 仍可使用 question-integrity.json 检查题库完整性。
+
+`browser-resume-sync.js` 使用两个隔离浏览器、真实 Supabase SDK 和完全模拟的 HTTP 传输验证学习位置同步：不作答仅翻题、两端互传、忽略旧本机位置、刷新不覆盖、离线再联网补传。所有 Supabase 请求均被拦截，不读取或更改真实账号记录。
