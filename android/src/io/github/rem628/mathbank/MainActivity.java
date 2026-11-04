@@ -19,7 +19,7 @@ public final class MainActivity extends Activity {
   private static final String BASE_PATH="/Rem628.github.io/";
   private static final String LEGACY_MIGRATION="https://rem628.github.io/__mathbank_migrate.html";
   private static final String NEW_MIGRATION=HOME+"__mathbank_migrate.html";
-  private static final String BUNDLE_VERSION="20261104d";
+  private static final String BUNDLE_VERSION="20261104e";
   private volatile String migrationData="{}";
   private volatile boolean migrating=false;
   private WebView web;

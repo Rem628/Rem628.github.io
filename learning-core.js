@@ -10,7 +10,11 @@
  function clean(p={}){return {events:map(p.events,validEvent),drafts:map(p.drafts,validDraft),prefs:map(p.prefs,validPref),feedback:map(p.feedback,v=>obj(v)&&safe(v.qid)&&clock(v.t)&&typeof v.text==='string'&&v.text.length<=3000&&typeof v.category==='string'&&v.category.length<=100&&['local','resolved'].includes(v.status))}}
  function choose(a,b){if(!a)return b;if(!b)return a;return (a.t||0)>(b.t||0)?a:(a.t||0)<(b.t||0)?b:JSON.stringify(a)>JSON.stringify(b)?a:b}
  function merge(a,b){a=clean(a);b=clean(b);const out=clean(a);
-  for(const key of ['events','prefs','feedback'])for(const[id,v]of Object.entries(b[key]))out[key][id]=choose(out[key][id],v);
+  for(const key of ['events','prefs','feedback'])for(const[id,v]of Object.entries(b[key])){
+   // A zero-clock resume is migrated legacy data with no known navigation time.
+   // Keep the received checkpoint when both are legacy, rather than sorting chapter names.
+   out[key][id]=key==='prefs'&&id==='lastStudy'&&out[key][id]?.t===0&&v.t===0?v:choose(out[key][id],v);
+  }
   for(const[id,v]of Object.entries(b.drafts)){
    const prev=out.drafts[id];if(!prev){out.drafts[id]=v;continue}
    const newer=(prev.updatedAt||prev.ts)>(v.updatedAt||v.ts)?prev:v,merged={...newer,ans:{...prev.ans},notes:{...prev.notes},answerTimes:{...prev.answerTimes},closed:!!(prev.closed||v.closed),timedOut:!!(prev.timedOut||v.timedOut),timeNotified:!!(prev.timeNotified||v.timeNotified)};
